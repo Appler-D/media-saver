@@ -19,6 +19,30 @@
 - **哔哩哔哩 1080P+** 需要 `SESSDATA` 登录 Cookie；高清流是 DASH 分离音视频，工具内置 ffmpeg 负责合并。
 - 平台接口会变。遇到失效链接、解析失败或页面改版，欢迎带链接提 Issue。
 
+## 项目定位与相似项目
+
+> 本项目与 GitHub 上其他名为 MediaSaver / Media Saver 的项目无关联，也未复用其代码；同名只是常见命名。
+
+我们的定位是**本地优先、三平台、四端统一、无 Python/yt-dlp 运行时、JSON 历史、MIT**。同类项目很多，下面只列代表性项目（排名不分先后）：
+
+| 项目                                                                                                                                             | 形态 / 栈                    | 覆盖                                        | 与我们的关系                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------- | -------------------------------------------- |
+| [清影下载器](https://github.com/zhangtt08/multi-platform-video-downloader)                                                                       | Electron + yt-dlp/gallery-dl | 抖音 / B站 / 小红书 / TikTok / YouTube / IG | 最接近；站点更广；我们无 Python/外部下载引擎 |
+| [UmauVDownloader](https://github.com/mcxiaoke/UmaoVDownloader)                                                                                   | Flutter + Node Web/CLI       | 抖音 / 小红书                               | 多端；我们多 B站、Electron 与浏览器扩展      |
+| [ClawKit](https://github.com/JoeyZ1105/clawkit)                                                                                                  | Python 本地提取器            | 抖音 / 小红书 / B站 / 微博等                | 偏元数据、评论提取，不是下载 GUI             |
+| [Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)                                                            | Python 自托管 API            | 抖音 / TikTok / B站                         | 托管 API/Web 控制台，不是本地桌面工具        |
+| [douyin-downloader](https://github.com/jiji262/douyin-downloader)                                                                                | Python                       | 抖音                                        | 单平台；批量、SQLite 去重、浏览器回退        |
+| [XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader) / [TikTokDownloader](https://github.com/JoeanAmier/TikTokDownloader)              | GPL-3.0                      | 小红书 / 抖音 + TikTok                      | 单平台成熟；未复用其代码                     |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) / [Lux](https://github.com/iawia002/lux)                                                              | Python / Go CLI              | B站等                                       | 通用或 B 站强；抖音/小红书非强项             |
+| [BBDown](https://github.com/nilaoda/BBDown) / [BiliTools](https://github.com/btjawa/BiliTools) / [DownKyi](https://github.com/leiurayer/downkyi) | C# / Tauri / 桌面            | 仅 B站                                      | 单平台；部分已归档/停更                      |
+
+我们的差异：
+
+- 不依赖 Python、yt-dlp、gallery-dl；抖音由本机浏览器完成签名，B 站走原生 API + WBI，XHS 解析页面状态。
+- CLI、本地网页、Electron、浏览器扩展共用一套 core 与 JSON 历史。
+- 代价：平台覆盖只有三个；不做批量/主页/评论采集；XHS 与 B 站高清仍受登录态限制。
+- 同类项目可作为平台改版的预警来源；我们不会把 GPL/AGPL 项目的代码直接搬进本 MIT 项目。
+
 ## 快速开始
 
 需要 Node.js >= 20.19 与 pnpm。没有 pnpm 时先执行 `npm i -g pnpm` 或 `corepack enable`。
