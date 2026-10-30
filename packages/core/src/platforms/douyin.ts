@@ -1,4 +1,4 @@
-import { captureDouyinDetail } from '../browser.js';
+import { captureDouyinDetail, captureDouyinNote } from '../browser.js';
 import { ResolveError } from '../errors.js';
 import { DEFAULT_USER_AGENT, fetchText, followRedirect } from '../http.js';
 import type {
@@ -238,6 +238,7 @@ async function fetchShareItem(id: string, context: ResolveContext): Promise<Douy
   const candidates = [
     `https://www.iesdouyin.com/share/video/${id}/`,
     `https://www.iesdouyin.com/share/note/${id}/`,
+    `https://www.iesdouyin.com/share/slides/${id}/`,
   ];
   let sawChallenge = false;
 
@@ -270,7 +271,20 @@ async function loadDouyinItem(
   kind: 'video' | 'note',
   context: ResolveContext,
 ): Promise<DouyinItem> {
-  let browserError: unknown;
+  let detailError: unknown;
+  let noteError: unknown;
+
+  if (kind === 'note') {
+    try {
+      return await captureDouyinNote(id, {
+        timeoutMs: context.timeoutMs,
+        log: context.log,
+      });
+    } catch (error) {
+      noteError = error;
+      context.log?.('抖音：图集页面没有取到图片，尝试详情接口');
+    }
+  }
 
   try {
     return await captureDouyinDetail(id, {
@@ -279,18 +293,30 @@ async function loadDouyinItem(
       log: context.log,
     });
   } catch (error) {
-    browserError = error;
-    context.log?.('抖音：浏览器解析失败，尝试分享页');
+    detailError = error;
+    context.log?.('抖音：详情接口解析失败，尝试图集页面/分享页');
+  }
+
+  if (kind !== 'note') {
+    try {
+      return await captureDouyinNote(id, {
+        timeoutMs: context.timeoutMs,
+        log: context.log,
+      });
+    } catch (error) {
+      noteError = error;
+    }
   }
 
   try {
     return await fetchShareItem(id, context);
   } catch (error) {
-    if (browserError instanceof ResolveError) {
+    const primary = detailError instanceof ResolveError ? detailError : noteError;
+    if (primary instanceof ResolveError) {
       const shareMessage = error instanceof Error ? error.message : String(error);
       throw new ResolveError(
-        browserError.code,
-        `${browserError.message}；分享页解析也失败：${shareMessage}`,
+        primary.code,
+        `${primary.message}；分享页解析也失败：${shareMessage}`,
         { cause: error },
       );
     }
@@ -325,7 +351,7 @@ async function resolveDouyin(url: URL, context: ResolveContext): Promise<MediaIt
     throw new ResolveError('unsupported_url', '没有识别到抖音作品 ID，请复制作品页或分享链接');
   }
 
-  const kindHint = /\/note\//.test(sourceUrl) ? 'note' : 'video';
+  const kindHint = /\/note\/|\/slides\//.test(sourceUrl) ? 'note' : 'video';
   const item = await loadDouyinItem(awemeId, kindHint, context);
   const id = item.aweme_id ?? awemeId;
   const images = buildImages(item);

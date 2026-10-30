@@ -15,6 +15,42 @@ const BROWSER_ARGS = [
   '--disable-blink-features=AutomationControlled',
 ];
 
+const NOTE_READY = `(() => {
+  const visit = (root) => {
+    for (const element of root.querySelectorAll('*')) {
+      if (element.shadowRoot && visit(element.shadowRoot)) return true;
+      if (element instanceof HTMLImageElement) {
+        const src = element.currentSrc || element.src;
+        if (src && src.includes('biz_tag=aweme_images')) return true;
+      }
+    }
+    return false;
+  };
+  return visit(document);
+})()`;
+
+const NOTE_COLLECT = `(() => {
+  const images = [];
+  const seen = new Set();
+  const visit = (root) => {
+    for (const element of root.querySelectorAll('*')) {
+      if (element.shadowRoot) visit(element.shadowRoot);
+      if (!(element instanceof HTMLImageElement)) continue;
+      const src = element.currentSrc || element.src;
+      if (!src || !src.includes('biz_tag=aweme_images') || seen.has(src)) continue;
+      seen.add(src);
+      images.push({
+        url: src,
+        width: element.naturalWidth,
+        height: element.naturalHeight,
+        alt: element.alt,
+      });
+    }
+  };
+  visit(document);
+  return { images, title: document.title };
+})()`;
+
 export interface DouyinCaptureOptions {
   kind?: 'video' | 'note';
   timeoutMs?: number;
@@ -140,7 +176,7 @@ export async function captureDouyinDetail(
           reject(
             new ResolveError(
               'blocked',
-              '抖音页面没有返回作品数据，可能触发了安全验证。设置 MEDIA_SAVER_HEADLESS=0 重新运行，在弹出的浏览器里完成验证后重试',
+              '抖音页面没有返回作品数据。可能是安全验证或需要登录：设置 MEDIA_SAVER_HEADLESS=0 重新运行，在弹出的浏览器里完成验证或扫码登录后重试',
             ),
           );
         }, timeoutMs);
@@ -185,6 +221,57 @@ export async function captureDouyinDetail(
       });
 
       return detail;
+    } finally {
+      await page.close().catch(() => {});
+    }
+  });
+}
+
+export async function captureDouyinNote(
+  awemeId: string,
+  options: DouyinCaptureOptions = {},
+): Promise<DouyinItem> {
+  return enqueue(async () => {
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+    try {
+      await page.setUserAgent(await browserUserAgent(browser));
+      await page.setViewport({ width: 1280, height: 900 });
+      const target = `https://www.douyin.com/note/${awemeId}`;
+      options.log?.(`抖音：打开 ${target}`);
+      await page.goto(target, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await page
+        .waitForFunction(NOTE_READY, { timeout: Math.min(timeoutMs, 20_000) })
+        .catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
+      const data = (await page.evaluate(NOTE_COLLECT)) as {
+        images?: Array<{ url: string; width: number; height: number; alt?: string }>;
+        title?: string;
+      };
+      const images = data.images ?? [];
+      if (images.length === 0) {
+        throw new ResolveError('parse_failed', '抖音图集页面没有找到图片');
+      }
+
+      const caption = images.find((image) => image.alt?.trim())?.alt ?? data.title ?? '';
+      const title = caption.replace(/\s*-\s*抖音\s*$/, '').trim() || `抖音图集 ${awemeId}`;
+
+      return {
+        aweme_id: awemeId,
+        desc: title,
+        images: images.map((image) => ({
+          url_list: [image.url],
+          width: image.width,
+          height: image.height,
+        })),
+      };
+    } catch (error) {
+      if (error instanceof ResolveError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ResolveError('blocked', `抖音图集页面加载失败：${message}`, { cause: error });
     } finally {
       await page.close().catch(() => {});
     }
