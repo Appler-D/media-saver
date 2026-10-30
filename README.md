@@ -71,7 +71,7 @@ powershell -ExecutionPolicy Bypass -File scripts\create-desktop-shortcut.ps1
 安装包由 GitHub Actions 的 `Release Desktop` 工作流或本地 `pnpm desktop:dist` 生成。双击安装；未签名会有 SmartScreen 提示，选择“更多信息 → 仍要运行”。
 
 - 安装包约 135MB；安装后从桌面或开始菜单打开。
-- 下载保存到系统“下载”目录下的 `MediaSaver` 子文件夹；菜单“文件 → 打开下载文件夹”。
+- 默认下载到系统“下载”目录下的 `MediaSaver` 子文件夹；菜单“文件 → 更改下载文件夹…”可修改，“文件 → 打开下载文件夹”直接打开当前目录。
 - 与网页/CLI 共用历史、Cookie 和浏览器登录态；抖音仍依赖系统 Edge/Chrome。
 - 若本机已有 MediaSaver 本地服务，应用会复用它；否则自己启动。17890 被其他程序占用时会提示。
 
@@ -226,7 +226,7 @@ pnpm desktop:dist
 - 下载接口只接受解析结果里的任务 ID 与变体 ID，不接受任意 URL 代理，避免 SSRF。
 - 浏览器配置目录在 `~/.media-saver/browser-profile`，不会写入仓库。
 - 下载历史只保存在本机 `~/.media-saver/history.json`，只含元数据；可在网页里删除或清空。
-- 桌面版同样只启动本地服务；下载文件保存在系统下载目录，历史元数据规则与网页/CLI 相同。
+- 桌面版同样只启动本地服务；下载文件默认保存在系统下载目录，可在“文件 → 更改下载文件夹…”中修改，历史元数据规则与网页/CLI 相同。
 
 ## License
 

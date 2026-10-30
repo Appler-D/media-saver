@@ -1,7 +1,15 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { type MediaServer, startMediaServer } from '@media-saver/web/app';
-import { BrowserWindow, dialog, app as electronApp, Menu, session, shell } from 'electron';
+import {
+  BrowserWindow,
+  dialog,
+  app as electronApp,
+  Menu,
+  type OpenDialogOptions,
+  session,
+  shell,
+} from 'electron';
 
 const BASE_URL = 'http://127.0.0.1:17890';
 const APP_ID = 'cn.appler.mediasaver';
@@ -23,14 +31,74 @@ function uniquePath(path: string): string {
   return `${base}-${Date.now()}${ext}`;
 }
 
+let downloadDirectoryOverride: string | undefined;
+
+function settingsPath(): string {
+  return join(electronApp.getPath('userData'), 'settings.json');
+}
+
+function loadSettings(): void {
+  try {
+    const parsed = JSON.parse(readFileSync(settingsPath(), 'utf8')) as {
+      downloadDir?: unknown;
+    };
+    if (typeof parsed.downloadDir === 'string' && parsed.downloadDir.trim()) {
+      downloadDirectoryOverride = parsed.downloadDir;
+    }
+  } catch {
+    downloadDirectoryOverride = undefined;
+  }
+}
+
+function saveSettings(): void {
+  mkdirSync(electronApp.getPath('userData'), { recursive: true });
+  writeFileSync(
+    settingsPath(),
+    JSON.stringify({ downloadDir: downloadDirectoryOverride ?? null }, null, 2),
+    'utf8',
+  );
+}
+
 function downloadDir(): string {
-  return join(electronApp.getPath('downloads'), 'MediaSaver');
+  return downloadDirectoryOverride ?? join(electronApp.getPath('downloads'), 'MediaSaver');
 }
 
 function openDownloads(): void {
   const directory = downloadDir();
   mkdirSync(directory, { recursive: true });
   void shell.openPath(directory);
+}
+
+async function chooseDownloadDir(): Promise<void> {
+  const options: OpenDialogOptions = {
+    title: '选择下载文件夹',
+    defaultPath: downloadDir(),
+    properties: ['openDirectory', 'createDirectory'],
+  };
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
+  const selected = result.filePaths[0];
+  if (result.canceled || !selected) return;
+
+  try {
+    mkdirSync(selected, { recursive: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox('无法使用该文件夹', message);
+    return;
+  }
+
+  downloadDirectoryOverride = selected;
+  saveSettings();
+  if (mainWindow) {
+    await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'MediaSaver',
+      message: '下载文件夹已更改',
+      detail: selected,
+    });
+  }
 }
 
 async function existingServer(): Promise<boolean> {
@@ -50,6 +118,7 @@ function setupMenu(): void {
       {
         label: '文件',
         submenu: [
+          { label: '更改下载文件夹…', click: () => void chooseDownloadDir() },
           { label: '打开下载文件夹', click: openDownloads },
           { type: 'separator' },
           { label: '退出', role: 'quit' },
@@ -133,13 +202,16 @@ async function start(): Promise<void> {
     ? join(process.resourcesPath, ffmpegName)
     : join(__dirname, '..', 'resources', ffmpegName);
 
+  loadSettings();
   const directory = downloadDir();
   mkdirSync(directory, { recursive: true });
   console.log('[desktop] download directory:', directory);
 
   session.defaultSession.on('will-download', (_event, item) => {
+    const targetDirectory = downloadDir();
+    mkdirSync(targetDirectory, { recursive: true });
     const filename = basename(item.getFilename()) || 'download';
-    const target = uniquePath(join(directory, filename));
+    const target = uniquePath(join(targetDirectory, filename));
     console.log('[desktop] download:', item.getURL(), '->', target);
     item.setSavePath(target);
     item.once('done', (_doneEvent, state) => {
