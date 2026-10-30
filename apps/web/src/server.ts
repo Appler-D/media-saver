@@ -9,6 +9,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import type { MediaItem } from '@media-saver/core';
 import {
+  clearHistory,
   closeBrowser,
   downloadVariant,
   request as fetchUpstream,
@@ -16,6 +17,9 @@ import {
   findBrowserExecutable,
   findFfmpeg,
   ResolveError,
+  readHistory,
+  recordDownload,
+  removeHistoryEntry,
   resolveMedia,
   sanitizeFilename,
 } from '@media-saver/core';
@@ -139,6 +143,21 @@ app.post<{ Body: { url?: string } }>('/api/resolve', async (request, reply) => {
   return { jobId, item };
 });
 
+app.get('/api/history', async () => {
+  const history = await readHistory();
+  return { items: history.items.slice(0, 50) };
+});
+
+app.delete('/api/history', async () => {
+  await clearHistory();
+  return { ok: true };
+});
+
+app.delete<{ Params: { id: string } }>('/api/history/:id', async (request) => {
+  await removeHistoryEntry(request.params.id);
+  return { ok: true };
+});
+
 app.get<{ Params: { jobId: string } }>('/api/cover/:jobId', async (request, reply) => {
   const job = getJob(request.params.jobId);
   if (!job.item.coverUrl) {
@@ -170,6 +189,11 @@ app.get<{ Params: { jobId: string; variantId: string } }>(
     await mkdir(TEMP_DIR, { recursive: true });
     const filePath = await downloadVariant(job.item, variant, { outputDir: TEMP_DIR });
     const info = await stat(filePath);
+    await recordDownload({
+      item: job.item,
+      filename: basename(filePath),
+      variant,
+    }).catch(() => {});
 
     reply.header('content-type', mimeForExt(variant.ext));
     reply.header('content-length', info.size);
@@ -202,6 +226,15 @@ app.get<{ Params: { jobId: string; imageId: string }; Querystring: { download?: 
     }
 
     const filename = `${sanitizeFilename(job.item.title, 'image')}-${image.id}.${image.ext}`;
+    if (request.query.download === '1') {
+      await recordDownload({
+        item: job.item,
+        filename,
+        imageId: image.id,
+        imageLabel: image.label,
+        imageCount: job.item.images?.length,
+      }).catch(() => {});
+    }
     reply.header('content-type', upstream.headers.get('content-type') ?? mimeForExt(image.ext));
     reply.header(
       'content-disposition',

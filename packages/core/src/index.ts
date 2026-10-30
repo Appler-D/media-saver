@@ -1,6 +1,7 @@
 export * from './browser.js';
 export * from './download.js';
 export * from './errors.js';
+export * from './history.js';
 export * from './http.js';
 export * from './registry.js';
 export * from './types.js';

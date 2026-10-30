@@ -10,7 +10,18 @@
   <body>
     <main class="shell">
       <header class="hero">
-        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>MediaSaver</div>
+        <div class="hero-top">
+          <div class="brand"><span class="brand-mark" aria-hidden="true"></span>MediaSaver</div>
+          <button
+            id="history-toggle"
+            type="button"
+            class="ghost small"
+            aria-controls="history"
+            aria-expanded="false"
+          >
+            历史记录
+          </button>
+        </div>
         <h1>把链接粘进来，<br />拿走你想要的内容。</h1>
         <p class="sub">抖音 · 小红书 · 哔哩哔哩　本地运行，数据不出本机</p>
       </header>
@@ -47,6 +58,17 @@
       </details>
 
       <section id="result" class="result" hidden></section>
+
+      <section id="history" class="history" aria-label="下载历史" hidden>
+        <div class="history-head">
+          <h2 tabindex="-1">下载历史</h2>
+          <div class="history-actions">
+            <button id="history-clear" type="button" class="ghost small">清空</button>
+            <button id="history-close" type="button" class="ghost small">收起</button>
+          </div>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
 
       <footer class="foot">
         <span id="footer-state" class="foot-state">正在检查本机环境…</span>

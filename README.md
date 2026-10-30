@@ -32,7 +32,7 @@ pnpm install
 - Windows：双击 `start.bat`
 - macOS / Linux：双击 `start.command`（首次可能需要 `chmod +x`）
 
-启动器会在首次运行时安装依赖、启动本地服务，并打开 <http://127.0.0.1:17890>。这是一个便于日常使用的启动器，不是独立安装包；打包成 Tauri 桌面应用还在后续计划中。
+启动器会在首次运行时安装依赖、启动本地服务，并打开 <http://127.0.0.1:17890>。这是一个便于日常使用的启动器，不是独立安装包；Electron 桌面安装包还在后续计划中。
 
 ### 本地网页
 
@@ -59,6 +59,16 @@ pnpm cli "https://www.bilibili.com/video/BV1GJ411x7h7" --cookie "SESSDATA=..."
 ```
 
 `--variant` 接受版本 id（如 `durl-64`）或清晰度（如 `1080p`）。默认下载排序后的第一个版本。
+
+### 下载历史
+
+网页右上角的“历史记录”会列出最近下载的作品（最多 200 条，网页显示最近 50 条）：
+
+- 存储为 `~/.media-saver/history.json`（JSON，可直接阅读和备份）。
+- 只记录平台、标题、作品页链接、下载的清晰度/图集、时间和本地路径；不保存 Cookie，也不保存会过期的带签名媒体 URL。
+- 只有实际下载后才写入；仅解析/查看不会产生记录。
+- 支持重新解析、打开作品页、删除单条和清空；点击“重新解析”会重新获取当前可用的地址。
+- CLI 下载也会写入同一个文件，因此网页端能看到 CLI 的保存路径。
 
 ### 浏览器扩展
 
@@ -93,18 +103,20 @@ pnpm cli "https://www.bilibili.com/video/BV1GJ411x7h7" --cookie "SESSDATA=..."
 
 环境变量：
 
-| 变量                     | 作用                                       |
-| ------------------------ | ------------------------------------------ |
-| `PORT`                   | 本地网页端口，默认 `17890`                 |
-| `FFMPEG_PATH`            | 指定系统 ffmpeg 可执行文件                 |
-| `MEDIA_SAVER_BROWSER`    | 指定 Chrome/Edge 可执行文件路径            |
-| `MEDIA_SAVER_HEADLESS=0` | 打开可见浏览器窗口，用于完成安全验证或登录 |
+| 变量                       | 作用                                                     |
+| -------------------------- | -------------------------------------------------------- |
+| `PORT`                     | 本地网页端口，默认 `17890`                               |
+| `FFMPEG_PATH`              | 指定系统 ffmpeg 可执行文件                               |
+| `MEDIA_SAVER_BROWSER`      | 指定 Chrome/Edge 可执行文件路径                          |
+| `MEDIA_SAVER_HEADLESS=0`   | 打开可见浏览器窗口，用于完成安全验证或登录               |
+| `MEDIA_SAVER_HISTORY_FILE` | 自定义历史文件路径（默认 `~/.media-saver/history.json`） |
 
 ## 项目结构
 
 ```text
 media-saver/
-├─ packages/core/          平台适配器 + 下载引擎（唯一解析逻辑）
+├─ packages/core/          平台适配器 + 下载引擎 + 历史存储
+│  ├─ src/history.ts       本地下载历史（JSON，原子写入）
 │  └─ src/platforms/       douyin.ts · bilibili.ts · xiaohongshu.ts
 ├─ apps/cli/               命令行
 ├─ apps/web/               本地网页（Fastify + 原生前端）
@@ -134,6 +146,7 @@ CI 在 PR 与 `main` 推送时运行 lint、typecheck、test，并构建 CLI。
 - Cookie 只保存在本机文件里；网页端只返回“是否配置”，不回传 Cookie 值。
 - 下载接口只接受解析结果里的任务 ID 与变体 ID，不接受任意 URL 代理，避免 SSRF。
 - 浏览器配置目录在 `~/.media-saver/browser-profile`，不会写入仓库。
+- 下载历史只保存在本机 `~/.media-saver/history.json`，只含元数据；可在网页里删除或清空。
 
 ## License
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, resolve as resolvePath } from 'node:path';
+import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import type { DownloadProgress, MediaItem, MediaVariant, PlatformId } from '@media-saver/core';
 import {
   closeBrowser,
@@ -10,6 +10,7 @@ import {
   findAdapter,
   formatBytes,
   ResolveError,
+  recordDownload,
   resolveMedia,
 } from '@media-saver/core';
 import { Command } from 'commander';
@@ -163,8 +164,16 @@ async function main(): Promise<void> {
         if (item.kind === 'images') {
           printItem(item);
           const paths = await downloadImages(item, { outputDir, onProgress });
+          const firstPath = paths[0];
+          const folderPath = firstPath ? dirname(firstPath) : outputDir;
+          await recordDownload({
+            item,
+            filename: basename(folderPath),
+            path: folderPath,
+            imageCount: paths.length,
+          }).catch(() => {});
           if (lastLine) process.stdout.write('\r\u001b[K');
-          console.log(pc.green(`已保存 ${paths.length} 张图片：${outputDir}`));
+          console.log(pc.green(`已保存 ${paths.length} 张图片：${folderPath}`));
           return;
         }
 
@@ -172,6 +181,12 @@ async function main(): Promise<void> {
         console.log(`${pc.bold(shortenTitle(item.title))}  ${pc.dim(`[${variant.label}]`)}`);
 
         const path = await downloadVariant(item, variant, { outputDir, onProgress });
+        await recordDownload({
+          item,
+          filename: basename(path),
+          path,
+          variant,
+        }).catch(() => {});
         if (lastLine) process.stdout.write('\r\u001b[K');
         console.log(pc.green(`已保存：${path}`));
       } finally {

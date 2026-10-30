@@ -6,6 +6,11 @@ const resultElement = document.querySelector('#result');
 const submitButton = form.querySelector('button[type="submit"]');
 const footerState = document.querySelector('#footer-state');
 const downloadFrame = document.querySelector('#download-frame');
+const historyToggle = document.querySelector('#history-toggle');
+const historySection = document.querySelector('#history');
+const historyList = document.querySelector('#history-list');
+const historyClear = document.querySelector('#history-clear');
+const historyClose = document.querySelector('#history-close');
 
 const PLATFORM_NAMES = {
   douyin: '抖音',
@@ -51,6 +56,19 @@ function formatDuration(seconds) {
   return hours > 0
     ? `${hours}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
     : `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
+function formatHistoryTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 function renderVariants(item) {
@@ -171,6 +189,123 @@ async function loadHealth() {
   footerState.textContent = parts.join(' · ');
   footerState.dataset.warn = String(!health.ffmpeg || !health.browser);
 }
+
+function renderHistory(items) {
+  if (items.length === 0) {
+    historyList.innerHTML = '<p class="history-empty">还没有下载记录。</p>';
+    return;
+  }
+
+  historyList.innerHTML = items
+    .map((entry) => {
+      const platform = PLATFORM_NAMES[entry.platform] ?? entry.platformName;
+      const kind = entry.kind === 'images' ? `${entry.imageCount ?? 0} 张图片` : '视频';
+      const meta = [entry.author, formatHistoryTime(entry.lastDownloadedAt)]
+        .filter(Boolean)
+        .join(' · ');
+      const downloads = (entry.downloads ?? [])
+        .map(
+          (download) =>
+            `<span class="history-download" title="${escapeHtml(download.filename ?? '')}">${escapeHtml(download.label ?? download.filename)}</span>`,
+        )
+        .join('');
+
+      return `<article class="history-item">
+        <div class="history-main">
+          <div class="badges">
+            <span class="badge badge-${escapeHtml(entry.platform)}">${escapeHtml(platform)}</span>
+            <span class="badge ghost">${escapeHtml(kind)}</span>
+          </div>
+          <h3>${escapeHtml(entry.title)}</h3>
+          <p class="history-meta">${escapeHtml(meta)}</p>
+          <div class="history-downloads">${downloads}</div>
+        </div>
+        <div class="history-buttons">
+          <button type="button" class="ghost small" data-action="resolve" data-url="${escapeHtml(entry.pageUrl)}">重新解析</button>
+          <button type="button" class="ghost small" data-action="open" data-url="${escapeHtml(entry.pageUrl)}">打开作品页</button>
+          <button type="button" class="ghost small" data-action="delete" data-id="${escapeHtml(entry.id)}">删除</button>
+        </div>
+      </article>`;
+    })
+    .join('');
+}
+
+async function loadHistory() {
+  historyList.innerHTML = '<p class="history-empty">正在读取历史…</p>';
+  try {
+    const data = await api('/api/history');
+    renderHistory(data.items ?? []);
+  } catch (error) {
+    historyList.innerHTML = `<p class="history-empty">${escapeHtml(
+      error instanceof Error ? error.message : '历史读取失败',
+    )}</p>`;
+  }
+}
+
+function setHistoryOpen(open) {
+  historySection.hidden = !open;
+  historyToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    void loadHistory();
+    historySection.querySelector('h2')?.focus();
+  }
+}
+
+historyToggle.addEventListener('click', () => {
+  setHistoryOpen(historySection.hidden);
+});
+
+historyClose.addEventListener('click', () => {
+  setHistoryOpen(false);
+  historyToggle.focus();
+});
+
+historyClear.addEventListener('click', async () => {
+  if (!window.confirm('清空所有下载历史？')) return;
+  try {
+    await api('/api/history', { method: 'DELETE' });
+    await loadHistory();
+    setStatus('历史已清空', 'ok');
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error), 'error');
+  }
+});
+
+historyList.addEventListener('click', (event) => {
+  const target =
+    event.target instanceof Element ? event.target.closest('button[data-action]') : null;
+  if (!target) return;
+
+  const action = target.dataset.action;
+  if (action === 'resolve') {
+    const url = target.dataset.url;
+    if (!url) return;
+    input.value = url;
+    setHistoryOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    form.requestSubmit();
+    return;
+  }
+
+  if (action === 'open') {
+    const url = target.dataset.url;
+    if (url) window.open(url, '_blank', 'noopener');
+    return;
+  }
+
+  if (action === 'delete') {
+    const id = target.dataset.id;
+    if (!id) return;
+    void (async () => {
+      try {
+        await api(`/api/history/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        await loadHistory();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error), 'error');
+      }
+    })();
+  }
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
