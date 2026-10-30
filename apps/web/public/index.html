@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>MediaSaver · 视频与图集下载</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>MediaSaver</div>
+        <h1>把链接粘进来，<br />拿走你想要的内容。</h1>
+        <p class="sub">抖音 · 小红书 · 哔哩哔哩　本地运行，数据不出本机</p>
+      </header>
+
+      <form id="resolve-form" class="input-row">
+        <label class="sr-only" for="url">作品链接</label>
+        <input
+          id="url"
+          name="url"
+          type="text"
+          placeholder="粘贴作品链接或分享文本…"
+          autocomplete="off"
+          spellcheck="false"
+          required
+        />
+        <button id="paste" type="button" class="ghost">粘贴</button>
+        <button type="submit" class="primary">解析</button>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <details class="help">
+        <summary>高清需要登录？配置 Cookie</summary>
+        <p>
+          把目标平台的 Cookie 写入
+          <code>~/.media-saver/cookies.json</code>
+          （Windows 为 <code>%USERPROFILE%\.media-saver\cookies.json</code>）：
+        </p>
+        <pre><code>{
+  "bilibili": "SESSDATA=...; bili_jct=...;",
+  "xiaohongshu": "a1=...; web_session=...;"
+}</code></pre>
+        <p>Cookie 只在请求对应平台时使用，不会上传到任何第三方。抖音解析使用本机浏览器的登录态，无需写入 Cookie。</p>
+      </details>
+
+      <section id="result" class="result" hidden></section>
+
+      <footer class="foot">
+        <span id="footer-state" class="foot-state">正在检查本机环境…</span>
+        <span>仅用于个人学习与备份 · MIT</span>
+      </footer>
+    </main>
+
+    <iframe id="download-frame" name="download-frame" title="下载文件" hidden></iframe>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

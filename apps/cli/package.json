@@ -1,0 +1,22 @@
+{
+  "name": "@media-saver/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "media-saver": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@media-saver/core": "workspace:*",
+    "abogus": "^2.1.1",
+    "commander": "^13.1.0",
+    "picocolors": "^1.1.1",
+    "puppeteer-core": "^25.16.0"
+  }
+}

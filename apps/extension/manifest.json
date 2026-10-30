@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "MediaSaver",
+  "version": "0.1.0",
+  "description": "把当前页面的抖音、小红书、B 站作品交给本地 MediaSaver 下载",
+  "action": {
+    "default_title": "MediaSaver",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["activeTab", "downloads"],
+  "host_permissions": ["http://127.0.0.1:17890/*", "http://localhost:17890/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data: http://127.0.0.1:17890; connect-src http://127.0.0.1:17890"
+  }
+}

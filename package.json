@@ -1,0 +1,31 @@
+{
+  "name": "media-saver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "抖音、小红书、哔哩哔哩视频与图集下载工具，本地运行，支持无水印",
+  "license": "MIT",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "cli": "tsx apps/cli/src/index.ts",
+    "web": "tsx apps/web/src/server.ts",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
