@@ -27,12 +27,21 @@
 pnpm install
 ```
 
-### 一键启动（桌面入口）
+### 一键启动（免安装）
 
 - Windows：双击 `start.bat`
 - macOS / Linux：双击 `start.command`（首次可能需要 `chmod +x`）
 
-启动器会在首次运行时安装依赖、启动本地服务，并打开 <http://127.0.0.1:17890>。这是一个便于日常使用的启动器，不是独立安装包；Electron 桌面安装包还在后续计划中。
+启动器会在首次运行时安装依赖、启动本地服务，并打开 <http://127.0.0.1:17890>。需要原生窗口和双击安装时，用下面的桌面安装版。
+
+### 桌面安装版（Electron，Windows）
+
+安装包由 GitHub Actions 的 `Release Desktop` 工作流或本地 `pnpm desktop:dist` 生成。双击安装；未签名会有 SmartScreen 提示，选择“更多信息 → 仍要运行”。
+
+- 安装包约 135MB；安装后从桌面或开始菜单打开。
+- 下载保存到系统“下载”目录下的 `MediaSaver` 子文件夹；菜单“文件 → 打开下载文件夹”。
+- 与网页/CLI 共用历史、Cookie 和浏览器登录态；抖音仍依赖系统 Edge/Chrome。
+- 若本机已有 MediaSaver 本地服务，应用会复用它；否则自己启动。17890 被其他程序占用时会提示。
 
 ### 本地网页
 
@@ -97,9 +106,10 @@ pnpm cli "https://www.bilibili.com/video/BV1GJ411x7h7" --cookie "SESSDATA=..."
 
 ## 前置条件
 
-- Node.js >= 20.19、pnpm
+- Node.js >= 20.19、pnpm（仅源码/开发；安装版不需要）
 - Chrome 或 Edge（仅抖音需要；其余平台不依赖浏览器）
 - ffmpeg：作为 npm 依赖自动安装（`@ffmpeg-installer/ffmpeg`）。如需使用系统 ffmpeg，可设置 `FFMPEG_PATH`。
+- Windows 10/11 x64（仅桌面安装版）
 
 环境变量：
 
@@ -120,6 +130,7 @@ media-saver/
 │  └─ src/platforms/       douyin.ts · bilibili.ts · xiaohongshu.ts
 ├─ apps/cli/               命令行
 ├─ apps/web/               本地网页（Fastify + 原生前端）
+├─ apps/desktop/           Electron 桌面安装版
 ├─ apps/extension/         MV3 浏览器扩展
 └─ scripts/launch.mjs      一键启动器
 ```
@@ -136,9 +147,39 @@ pnpm test        # 纯单元测试，不访问网络、不启动浏览器
 pnpm lint
 pnpm typecheck
 pnpm --filter @media-saver/cli build
+pnpm desktop        # 开发模式启动 Electron
+pnpm desktop:dist   # 构建 Windows NSIS 安装包
 ```
 
 CI 在 PR 与 `main` 推送时运行 lint、typecheck、test，并构建 CLI。
+
+## 桌面版发布
+
+1. 修改 `apps/desktop/package.json` 的 `version`。
+2. 推送 `v<version>` 标签，或手动运行 GitHub Actions 的 `Release Desktop`。
+3. Windows runner 会生成 `MediaSaver-<version>-Setup.exe` 并上传为 Artifact；打标签时同时附到 Release。
+4. 未签名安装包会有 SmartScreen 提示；消除提示需要购买代码签名证书。
+
+本地构建（Windows）：
+
+```bash
+pnpm desktop:dist
+```
+
+国内网络下如果 Electron/构建组件下载失败，设置镜像后重试：
+
+```bash
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
+ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+pnpm desktop:dist
+```
+
+## 维护策略
+
+- 平台解析集中在 `packages/core/src/platforms/`；平台改版只改对应适配器，CLI/网页/桌面共用。
+- 历史使用 JSON，没有数据库或原生模块；桌面壳不引入第二套后端。
+- GitHub Actions 负责 CI 与 Windows 安装包构建；建议一年集中升级一次 Electron/pnpm 依赖。
+- 桌面壳可以一年维护一次；平台接口是否失效不由我们控制，届时更新对应适配器即可，通常不需要重写前端或桌面壳。
 
 ## 隐私与安全
 
@@ -147,6 +188,7 @@ CI 在 PR 与 `main` 推送时运行 lint、typecheck、test，并构建 CLI。
 - 下载接口只接受解析结果里的任务 ID 与变体 ID，不接受任意 URL 代理，避免 SSRF。
 - 浏览器配置目录在 `~/.media-saver/browser-profile`，不会写入仓库。
 - 下载历史只保存在本机 `~/.media-saver/history.json`，只含元数据；可在网页里删除或清空。
+- 桌面版同样只启动本地服务；下载文件保存在系统下载目录，历史元数据规则与网页/CLI 相同。
 
 ## License
 

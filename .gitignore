@@ -13,3 +13,6 @@ downloads/
 .media-saver/
 .chrome-profile/
 *.log
+
+apps/desktop/resources/
+apps/desktop/release/

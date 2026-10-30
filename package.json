@@ -12,6 +12,8 @@
   "scripts": {
     "cli": "tsx apps/cli/src/index.ts",
     "web": "tsx apps/web/src/server.ts",
+    "desktop": "pnpm --filter @media-saver/desktop start",
+    "desktop:dist": "pnpm --filter @media-saver/desktop dist",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",

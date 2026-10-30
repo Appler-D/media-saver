@@ -1,0 +1,76 @@
+{
+  "name": "@media-saver/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MediaSaver 桌面版",
+  "author": "Appler-D",
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/copy-ffmpeg.mjs && tsup",
+    "start": "pnpm build && electron .",
+    "dist": "pnpm build && electron-builder --win nsis",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/static": "^8.0.0",
+    "fastify": "^5.0.0",
+    "puppeteer-core": "^25.16.0"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@media-saver/core": "workspace:*",
+    "@media-saver/web": "workspace:*",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "cn.appler.mediasaver",
+    "productName": "MediaSaver",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": ".",
+        "filter": [
+          "ffmpeg*"
+        ]
+      },
+      {
+        "from": "../../apps/web/public",
+        "to": "web"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "MediaSaver-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MediaSaver",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
