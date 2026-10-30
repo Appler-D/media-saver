@@ -58,6 +58,14 @@ pnpm install
 
 启动器会在首次运行时安装依赖、启动本地服务，并打开 <http://127.0.0.1:17890>。需要原生窗口和双击安装时，用下面的桌面安装版。
 
+想在桌面放一个启动器（Windows）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create-desktop-shortcut.ps1
+```
+
+脚本会在桌面创建 `MediaSaver.lnk`，优先指向已安装的桌面版或本机构建，都没有时指向 `start.bat`。
+
 ### 桌面安装版（Electron，Windows）
 
 安装包由 GitHub Actions 的 `Release Desktop` 工作流或本地 `pnpm desktop:dist` 生成。双击安装；未签名会有 SmartScreen 提示，选择“更多信息 → 仍要运行”。
