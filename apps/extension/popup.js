@@ -87,7 +87,7 @@ function bindDownloads(jobId) {
   for (const button of resultElement.querySelectorAll('[data-image]')) {
     button.addEventListener('click', () => {
       startDownload(
-        `/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(button.dataset.image)}?download=1`,
+        `/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(button.dataset.image)}?download=1&format=jpg`,
       );
     });
   }
@@ -115,7 +115,7 @@ function render(item, jobId) {
 
     resultElement.innerHTML = `
       <div class="item-head">${cover}<div class="item-meta"><h1>${escapeHtml(item.title)}</h1><p>${escapeHtml(meta)}</p></div></div>
-      <p class="hint">共 ${item.images?.length ?? 0} 张图片，点击下载原图。</p>
+      <p class="hint">共 ${item.images?.length ?? 0} 张图片，点击下载 JPG。</p>
       <div class="thumbs">${images}</div>
     `;
   } else {

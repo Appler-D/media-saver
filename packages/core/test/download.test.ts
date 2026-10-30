@@ -7,8 +7,8 @@ import { downloadImages, downloadVariant } from '../src/download.js';
 import type { MediaItem, MediaVariant } from '../src/types.js';
 
 const fileBytes = Buffer.from(
-  '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000100ffff03000006000557bfabd40000000049454e44ae426082',
-  'hex',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
 );
 
 let server: Server;
@@ -63,6 +63,27 @@ describe('download engine', () => {
       if (!first || !second) throw new Error('missing downloaded files');
       expect((await readFile(first)).equals(fileBytes)).toBe(true);
       expect((await readFile(second)).equals(fileBytes)).toBe(true);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('converts images to JPG when requested', async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), 'media-saver-test-'));
+    try {
+      const paths = await downloadImages(
+        {
+          ...baseItem,
+          images: [{ id: 'image-1', url: `${baseUrl}/a.png`, ext: 'png', watermark: 'none' }],
+        },
+        { outputDir, imageFormat: 'jpg' },
+      );
+      const [path] = paths;
+      if (!path) throw new Error('missing downloaded file');
+      expect(path.endsWith('.jpg')).toBe(true);
+      const bytes = await readFile(path);
+      expect(bytes[0]).toBe(0xff);
+      expect(bytes[1]).toBe(0xd8);
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

@@ -190,6 +190,11 @@ button {
   font-size: 12px;
 }
 
+.ghost:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .primary:active,
 .ghost:active {
   transform: translateY(1px);

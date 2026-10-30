@@ -10,6 +10,7 @@ let mainWindow: BrowserWindow | undefined;
 let mediaServer: MediaServer | undefined;
 let appUrl = BASE_URL;
 let quitting = false;
+let lastExternalOpen = { url: '', at: 0 };
 
 function uniquePath(path: string): string {
   if (!existsSync(path)) return path;
@@ -100,7 +101,13 @@ function createWindow(url: string): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (/^https?:/i.test(target)) void shell.openExternal(target);
+    if (/^https?:/i.test(target)) {
+      const now = Date.now();
+      if (target !== lastExternalOpen.url || now - lastExternalOpen.at > 2500) {
+        lastExternalOpen = { url: target, at: now };
+        void shell.openExternal(target);
+      }
+    }
     return { action: 'deny' };
   });
 

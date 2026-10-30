@@ -25,6 +25,7 @@ interface CliOptions {
   variant?: string;
   out: string;
   cookie?: string;
+  imageFormat?: string;
   json?: boolean;
 }
 
@@ -69,7 +70,7 @@ function printItem(item: MediaItem): void {
   if (item.kind === 'images') {
     console.log(`共 ${item.images?.length ?? 0} 张图片：`);
     for (const [index, image] of (item.images ?? []).entries()) {
-      console.log(`  ${index + 1}. ${image.label ?? image.id}（${image.ext}）`);
+      console.log(`  ${index + 1}. ${image.label ?? image.id}`);
     }
     return;
   }
@@ -129,6 +130,7 @@ async function main(): Promise<void> {
     .option('-l, --list', '只列出可用版本，不下载')
     .option('-v, --variant <id>', '指定版本 id 或清晰度')
     .option('-o, --out <dir>', '输出目录', DEFAULT_OUT_DIR)
+    .option('--image-format <format>', '图集输出格式：jpg 或 original', 'jpg')
     .option('--cookie <cookie>', '直接传入目标平台的 Cookie')
     .option('--json', '输出解析结果的 JSON')
     .action(async (input: string, options: CliOptions) => {
@@ -162,8 +164,17 @@ async function main(): Promise<void> {
         };
 
         if (item.kind === 'images') {
+          const imageFormat = options.imageFormat === 'original' ? 'original' : 'jpg';
+          if (
+            options.imageFormat &&
+            options.imageFormat !== 'jpg' &&
+            options.imageFormat !== 'original'
+          ) {
+            throw new ResolveError('parse_failed', '--image-format 只支持 jpg 或 original');
+          }
           printItem(item);
-          const paths = await downloadImages(item, { outputDir, onProgress });
+          console.log(pc.dim(imageFormat === 'jpg' ? '图片将转换为 JPG' : '保留原始图片格式'));
+          const paths = await downloadImages(item, { outputDir, onProgress, imageFormat });
           const firstPath = paths[0];
           const folderPath = firstPath ? dirname(firstPath) : outputDir;
           await recordDownload({

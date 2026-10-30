@@ -108,13 +108,13 @@ function renderImages(item, jobId) {
     .map(
       (
         image,
-      ) => `<a class="thumb" href="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}?download=1" title="${escapeHtml(image.label ?? '下载图片')}">
+      ) => `<a class="thumb" href="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}?download=1&format=jpg" title="${escapeHtml(image.label ?? '下载图片')}">
         <img src="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}" alt="${escapeHtml(image.label ?? '')}" loading="lazy" />
       </a>`,
     )
     .join('');
 
-  return `<p class="hint">共 ${images.length} 张图片，点击下载原图。</p><div class="thumbs">${thumbs}</div>`;
+  return `<p class="hint">共 ${images.length} 张图片，点击下载 JPG。</p><div class="thumbs">${thumbs}</div>`;
 }
 
 function bindVariants(jobId) {
@@ -289,7 +289,19 @@ historyList.addEventListener('click', (event) => {
 
   if (action === 'open') {
     const url = target.dataset.url;
-    if (url) window.open(url, '_blank', 'noopener');
+    if (!url) return;
+    const opened = window.open(url, 'media-saver-source');
+    if (opened) {
+      try {
+        opened.opener = null;
+      } catch {
+        // 跨域窗口可能不允许设置 opener
+      }
+    }
+    target.disabled = true;
+    setTimeout(() => {
+      target.disabled = false;
+    }, 2000);
     return;
   }
 

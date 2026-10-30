@@ -10,6 +10,7 @@ import type { MediaItem } from '@media-saver/core';
 import {
   clearHistory,
   closeBrowser,
+  downloadImage,
   downloadVariant,
   request as fetchUpstream,
   findAdapter,
@@ -223,42 +224,72 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
     },
   );
 
-  app.get<{ Params: { jobId: string; imageId: string }; Querystring: { download?: string } }>(
-    '/api/image/:jobId/:imageId',
-    async (request, reply) => {
-      const job = getJob(request.params.jobId);
-      const image = job.item.images?.find((item) => item.id === request.params.imageId);
-      if (!image) {
-        throw new ResolveError('not_found', '没有这张图片');
-      }
+  app.get<{
+    Params: { jobId: string; imageId: string };
+    Querystring: { download?: string; format?: string };
+  }>('/api/image/:jobId/:imageId', async (request, reply) => {
+    const job = getJob(request.params.jobId);
+    const image = job.item.images?.find((item) => item.id === request.params.imageId);
+    if (!image) {
+      throw new ResolveError('not_found', '没有这张图片');
+    }
 
-      const upstream = await fetchUpstream(image.url, {
-        headers: image.headers,
-        timeoutMs: 60_000,
+    const wantsJpg = request.query.download === '1' && request.query.format === 'jpg';
+    if (wantsJpg) {
+      await mkdir(TEMP_DIR, { recursive: true });
+      const filePath = await downloadImage(image, {
+        outputDir: TEMP_DIR,
+        filename: `${sanitizeFilename(job.item.title, 'image')}-${image.id}`,
+        imageFormat: 'jpg',
       });
-      if (!upstream.body) {
-        throw new ResolveError('upstream', '图片下载失败');
-      }
+      const info = await stat(filePath);
+      const filename = basename(filePath);
+      await recordDownload({
+        item: job.item,
+        filename,
+        imageId: image.id,
+        imageLabel: image.label,
+        imageCount: job.item.images?.length,
+      }).catch(() => {});
 
-      const filename = `${sanitizeFilename(job.item.title, 'image')}-${image.id}.${image.ext}`;
-      if (request.query.download === '1') {
-        await recordDownload({
-          item: job.item,
-          filename,
-          imageId: image.id,
-          imageLabel: image.label,
-          imageCount: job.item.images?.length,
-        }).catch(() => {});
-      }
-      reply.header('content-type', upstream.headers.get('content-type') ?? mimeForExt(image.ext));
-      reply.header(
-        'content-disposition',
-        `${request.query.download === '1' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
+      reply.header('content-type', 'image/jpeg');
+      reply.header('content-length', info.size);
+      reply.header('content-disposition', attachment(filename));
       reply.header('cache-control', 'no-store');
-      return reply.send(Readable.fromWeb(upstream.body));
-    },
-  );
+
+      const stream = createReadStream(filePath);
+      stream.on('close', () => {
+        void rm(filePath, { force: true });
+      });
+      return reply.send(stream);
+    }
+
+    const upstream = await fetchUpstream(image.url, {
+      headers: image.headers,
+      timeoutMs: 60_000,
+    });
+    if (!upstream.body) {
+      throw new ResolveError('upstream', '图片下载失败');
+    }
+
+    const filename = `${sanitizeFilename(job.item.title, 'image')}-${image.id}.${image.ext}`;
+    if (request.query.download === '1') {
+      await recordDownload({
+        item: job.item,
+        filename,
+        imageId: image.id,
+        imageLabel: image.label,
+        imageCount: job.item.images?.length,
+      }).catch(() => {});
+    }
+    reply.header('content-type', upstream.headers.get('content-type') ?? mimeForExt(image.ext));
+    reply.header(
+      'content-disposition',
+      `${request.query.download === '1' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    reply.header('cache-control', 'no-store');
+    return reply.send(Readable.fromWeb(upstream.body));
+  });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ResolveError) {

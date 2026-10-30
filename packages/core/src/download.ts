@@ -21,6 +21,8 @@ export interface DownloadOptions {
   filename?: string;
   signal?: AbortSignal;
   onProgress?: (progress: DownloadProgress) => void;
+  /** 图片输出格式；默认保留源格式 */
+  imageFormat?: 'original' | 'jpg';
 }
 
 let ffmpegCache: Promise<string | undefined> | undefined;
@@ -218,14 +220,70 @@ export async function downloadImage(
 ): Promise<string> {
   await mkdir(options.outputDir, { recursive: true });
   const filename = sanitizeFilename(options.filename ?? image.id ?? 'image');
-  const target = uniquePath(join(options.outputDir, `${filename}.${image.ext}`));
-  await downloadStream(
-    { url: image.url, ext: image.ext, headers: image.headers },
-    target,
-    'image',
-    options,
-  );
-  return target;
+  return downloadImageFile(image, options.outputDir, filename, options);
+}
+
+async function convertImageToJpg(sourcePath: string, targetPath: string): Promise<void> {
+  const ffmpeg = await findFfmpeg();
+  if (!ffmpeg) {
+    throw new ResolveError('ffmpeg_missing', '图片转 JPG 需要 ffmpeg，请安装 ffmpeg 后重试');
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      ffmpeg,
+      ['-y', '-i', sourcePath, '-frames:v', '1', '-q:v', '2', targetPath],
+      { stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = `${stderr}${chunk.toString()}`.slice(-1000);
+    });
+    child.on('error', (error) => {
+      reject(new ResolveError('download_failed', `无法启动 ffmpeg：${error.message}`));
+    });
+    child.on('close', (code) => {
+      if (code === 0 && existsSync(targetPath)) resolve();
+      else reject(new ResolveError('download_failed', `图片转 JPG 失败：${stderr}`));
+    });
+  });
+}
+
+async function downloadImageFile(
+  image: MediaImage,
+  outputDir: string,
+  baseName: string,
+  options: DownloadOptions,
+): Promise<string> {
+  const format = options.imageFormat ?? 'original';
+  const isJpgSource = /^jpe?g$/i.test(image.ext);
+  const targetExt = format === 'jpg' ? 'jpg' : image.ext;
+  const target = uniquePath(join(outputDir, `${baseName}.${targetExt}`));
+
+  if (format !== 'jpg' || isJpgSource) {
+    await downloadStream(
+      { url: image.url, ext: image.ext, headers: image.headers },
+      target,
+      'image',
+      options,
+    );
+    return target;
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'media-saver-image-'));
+  try {
+    const sourcePath = join(tempDir, `source.${image.ext}`);
+    await downloadStream(
+      { url: image.url, ext: image.ext, headers: image.headers },
+      sourcePath,
+      'image',
+      options,
+    );
+    await convertImageToJpg(sourcePath, target);
+    return target;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 export async function downloadImages(item: MediaItem, options: DownloadOptions): Promise<string[]> {
@@ -240,14 +298,8 @@ export async function downloadImages(item: MediaItem, options: DownloadOptions):
 
   const paths: string[] = [];
   for (const [index, image] of images.entries()) {
-    const target = join(outputDir, `${String(index + 1).padStart(2, '0')}.${image.ext}`);
-    await downloadStream(
-      { url: image.url, ext: image.ext, headers: image.headers },
-      target,
-      'image',
-      options,
-    );
-    paths.push(target);
+    const baseName = String(index + 1).padStart(2, '0');
+    paths.push(await downloadImageFile(image, outputDir, baseName, options));
   }
   return paths;
 }

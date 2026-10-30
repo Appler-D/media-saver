@@ -73,7 +73,7 @@ pnpm install
 pnpm web
 ```
 
-打开 <http://127.0.0.1:17890>。服务只监听 `127.0.0.1`，不会暴露到局域网或公网。
+打开 <http://127.0.0.1:17890>。服务只监听 `127.0.0.1`，不会暴露到局域网或公网。图集下载默认转换为 JPG；缩略图仍使用平台原图。
 
 ### 命令行
 
@@ -93,6 +93,12 @@ pnpm cli "https://www.bilibili.com/video/BV1GJ411x7h7" --cookie "SESSDATA=..."
 
 `--variant` 接受版本 id（如 `durl-64`）或清晰度（如 `1080p`）。默认下载排序后的第一个版本。
 
+图集默认转换为 JPG；如需保留平台原始格式（例如 WebP），加 `--image-format original`。
+
+```bash
+pnpm cli "https://www.douyin.com/note/xxxx" --image-format original
+```
+
 ### 下载历史
 
 网页右上角的“历史记录”会列出最近下载的作品（最多 200 条，网页显示最近 50 条）：
@@ -110,7 +116,7 @@ pnpm cli "https://www.bilibili.com/video/BV1GJ411x7h7" --cookie "SESSDATA=..."
 3. 选择本仓库的 `apps/extension` 目录。
 4. 打开抖音、小红书或 B 站作品页，点击工具栏上的 MediaSaver 图标，选择版本下载。
 
-扩展是薄壳：解析和下载都交给本地服务，因此不复制平台 Cookie，也不需要额外申请平台权限。
+扩展是薄壳：解析和下载都交给本地服务，因此不复制平台 Cookie，也不需要额外申请平台权限。图集下载默认 JPG。
 
 ## 登录 Cookie
 
