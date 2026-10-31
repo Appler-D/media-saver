@@ -23,6 +23,15 @@
               平台管理
             </button>
             <button
+              id="cookies-toggle"
+              type="button"
+              class="ghost small"
+              aria-controls="cookies"
+              aria-expanded="false"
+            >
+              Cookie
+            </button>
+            <button
               id="history-toggle"
               type="button"
               class="ghost small"
@@ -80,7 +89,7 @@
       <details class="help">
         <summary>高清需要登录？配置 Cookie</summary>
         <p>
-          把目标平台的 Cookie 写入
+          可以点右上角“Cookie”直接填写；也可以写入
           <code>~/.media-saver/cookies.json</code>
           （Windows 为 <code>%USERPROFILE%\.media-saver\cookies.json</code>）：
         </p>
@@ -112,6 +121,54 @@
         <div class="platforms-actions">
           <span id="platform-message" class="platform-message" role="status" aria-live="polite"></span>
           <button id="platforms-save" type="button" class="primary">保存</button>
+        </div>
+      </section>
+
+      <section id="cookies" class="platforms" aria-label="Cookie 设置" hidden>
+        <div class="platforms-head">
+          <h2 tabindex="-1">Cookie 设置</h2>
+          <button id="cookies-close" type="button" class="ghost small">收起</button>
+        </div>
+        <p class="hint">只保存在本机，不会上传。B 站高清和小红书部分笔记需要登录 Cookie；抖音使用本机浏览器登录态。</p>
+        <div class="cookie-fields">
+          <div class="cookie-field">
+            <div class="cookie-field-head">
+              <span>B站 Cookie</span>
+              <span id="cookie-bilibili-state" class="cookie-state" data-configured="false">未配置</span>
+            </div>
+            <input
+              id="cookie-bilibili"
+              type="password"
+              placeholder="SESSDATA=...; bili_jct=...;"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="cookie-field-actions">
+              <span class="hint">用于 1080P+ 清晰度</span>
+              <button id="cookie-bilibili-clear" type="button" class="ghost small">清除</button>
+            </div>
+          </div>
+          <div class="cookie-field">
+            <div class="cookie-field-head">
+              <span>小红书 Cookie</span>
+              <span id="cookie-xiaohongshu-state" class="cookie-state" data-configured="false">未配置</span>
+            </div>
+            <input
+              id="cookie-xiaohongshu"
+              type="password"
+              placeholder="a1=...; web_session=...;"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="cookie-field-actions">
+              <span class="hint">部分笔记需要登录，并需要有效分享链接</span>
+              <button id="cookie-xiaohongshu-clear" type="button" class="ghost small">清除</button>
+            </div>
+          </div>
+        </div>
+        <div class="cookie-actions">
+          <span id="cookie-message" class="platform-message" role="status" aria-live="polite"></span>
+          <button id="cookies-save" type="button" class="primary">保存 Cookie</button>
         </div>
       </section>
 

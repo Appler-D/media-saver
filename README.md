@@ -132,7 +132,7 @@ pnpm cli "https://www.douyin.com/note/xxxx" --image-format original
 
 ## 登录 Cookie
 
-把 Cookie 写入 `~/.media-saver/cookies.json`（Windows 为 `%USERPROFILE%\.media-saver\cookies.json`）：
+在网页/桌面版右上角点“Cookie”可以直接填写，保存后立即生效。也可以写入 `~/.media-saver/cookies.json`（Windows 为 `%USERPROFILE%\.media-saver\cookies.json`）：
 
 ```json
 {

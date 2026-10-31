@@ -32,6 +32,7 @@ const TEMP_DIR = join(homedir(), '.media-saver', 'web-temp');
 const JOB_TTL_MS = 30 * 60 * 1000;
 const PLATFORM_IDS = listAdapters().map((adapter) => adapter.id);
 const PLATFORM_ID_SET = new Set<string>(PLATFORM_IDS);
+const COOKIE_PLATFORMS = ['bilibili', 'xiaohongshu'] as const;
 const REFERERS: Record<string, string> = {
   douyin: 'https://www.douyin.com/',
   bilibili: 'https://www.bilibili.com/',
@@ -68,6 +69,36 @@ async function readCookies(): Promise<Record<string, string>> {
   } catch {
     return {};
   }
+}
+
+function cookieState(cookies: Record<string, string>): Record<string, boolean> {
+  return {
+    bilibili: Boolean(cookies.bilibili),
+    xiaohongshu: Boolean(cookies.xiaohongshu),
+  };
+}
+
+async function writeCookies(updates: Record<string, string | null>): Promise<void> {
+  let existing: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(await readFile(COOKIE_FILE, 'utf8')) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      existing = parsed as Record<string, unknown>;
+    }
+  } catch {
+    existing = {};
+  }
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === null) delete existing[key];
+    else existing[key] = value;
+  }
+  await mkdir(dirname(COOKIE_FILE), { recursive: true });
+  const temporary = `${COOKIE_FILE}.tmp`;
+  await writeFile(temporary, JSON.stringify(existing, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  await rename(temporary, COOKIE_FILE);
 }
 
 async function readEnabledPlatforms(): Promise<Set<string>> {
@@ -192,6 +223,36 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
         xiaohongshu: Boolean(cookies.xiaohongshu),
       },
     };
+  });
+
+  app.get('/api/cookies', async () => {
+    const cookies = await readCookies();
+    return { cookies: cookieState(cookies) };
+  });
+
+  app.put<{ Body: Record<string, unknown> }>('/api/cookies', async (request, reply) => {
+    const body = request.body ?? {};
+    const updates: Record<string, string | null> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (!(COOKIE_PLATFORMS as readonly string[]).includes(key)) {
+        return reply.code(400).send({ error: { code: 'invalid_input', message: '不支持的平台' } });
+      }
+      if (value === null) {
+        updates[key] = null;
+      } else if (typeof value === 'string') {
+        const trimmed = value.trim();
+        updates[key] = trimmed ? trimmed : null;
+      } else {
+        return reply
+          .code(400)
+          .send({ error: { code: 'invalid_input', message: 'Cookie 格式无效' } });
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return reply.code(400).send({ error: { code: 'invalid_input', message: '没有修改 Cookie' } });
+    }
+    await writeCookies(updates);
+    return { cookies: cookieState(await readCookies()) };
   });
 
   app.get('/api/platforms', async () => {

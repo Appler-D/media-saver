@@ -16,6 +16,17 @@ const platformList = document.querySelector('#platform-list');
 const platformSave = document.querySelector('#platforms-save');
 const platformClose = document.querySelector('#platforms-close');
 const platformMessage = document.querySelector('#platform-message');
+const cookiesToggle = document.querySelector('#cookies-toggle');
+const cookiesSection = document.querySelector('#cookies');
+const cookiesClose = document.querySelector('#cookies-close');
+const cookieBilibili = document.querySelector('#cookie-bilibili');
+const cookieXiaohongshu = document.querySelector('#cookie-xiaohongshu');
+const cookieBilibiliState = document.querySelector('#cookie-bilibili-state');
+const cookieXiaohongshuState = document.querySelector('#cookie-xiaohongshu-state');
+const cookieBilibiliClear = document.querySelector('#cookie-bilibili-clear');
+const cookieXiaohongshuClear = document.querySelector('#cookie-xiaohongshu-clear');
+const cookiesSave = document.querySelector('#cookies-save');
+const cookieMessage = document.querySelector('#cookie-message');
 const importFileButton = document.querySelector('#import-file');
 const fileInput = document.querySelector('#file-input');
 const importPanel = document.querySelector('#import-panel');
@@ -49,6 +60,7 @@ const TRAILING_URL_PUNCTUATION = /[),.;!?，。；！？、]+$/u;
 
 let health = { ffmpeg: false, browser: false, cookies: {} };
 let platforms = [];
+let cookieConfigured = { bilibili: false, xiaohongshu: false };
 let busy = false;
 let batchBusy = false;
 let resolvedItems = [];
@@ -444,6 +456,97 @@ function setPlatformsOpen(open) {
   }
 }
 
+function setCookieMessage(message, tone = '') {
+  cookieMessage.textContent = message;
+  cookieMessage.dataset.tone = tone;
+}
+
+function renderCookieState() {
+  const entries = [
+    ['bilibili', cookieBilibili, cookieBilibiliState],
+    ['xiaohongshu', cookieXiaohongshu, cookieXiaohongshuState],
+  ];
+  for (const [id, input, state] of entries) {
+    const configured = Boolean(cookieConfigured[id]);
+    state.textContent = configured ? '已配置' : '未配置';
+    state.dataset.configured = String(configured);
+    input.placeholder = configured
+      ? '已配置；输入新 Cookie 可覆盖'
+      : id === 'bilibili'
+        ? 'SESSDATA=...; bili_jct=...;'
+        : 'a1=...; web_session=...;';
+  }
+}
+
+async function loadCookies() {
+  try {
+    const data = await api('/api/cookies');
+    cookieConfigured = data.cookies ?? cookieConfigured;
+    renderCookieState();
+  } catch {
+    setCookieMessage('无法读取 Cookie 设置，请确认本地服务仍在运行。', 'error');
+  }
+}
+
+function setCookiesOpen(open) {
+  cookiesSection.hidden = !open;
+  cookiesToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    setCookieMessage('');
+    void loadCookies();
+    cookiesSection.querySelector('h2')?.focus();
+  }
+}
+
+async function clearCookie(platform) {
+  setCookieMessage('正在清除…');
+  try {
+    const data = await api('/api/cookies', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ [platform]: null }),
+    });
+    cookieConfigured = data.cookies ?? cookieConfigured;
+    renderCookieState();
+    setCookieMessage('已清除', 'ok');
+    setStatus('Cookie 已清除', 'ok');
+    void loadHealth();
+  } catch (error) {
+    setCookieMessage(error instanceof Error ? error.message : String(error), 'error');
+  }
+}
+
+cookiesSave.addEventListener('click', async () => {
+  const updates = {};
+  if (cookieBilibili.value.trim()) updates.bilibili = cookieBilibili.value.trim();
+  if (cookieXiaohongshu.value.trim()) updates.xiaohongshu = cookieXiaohongshu.value.trim();
+  if (Object.keys(updates).length === 0) {
+    setCookieMessage('请输入新的 Cookie，或使用清除按钮。', 'error');
+    return;
+  }
+
+  cookiesSave.disabled = true;
+  setCookieMessage('正在保存…');
+  try {
+    const data = await api('/api/cookies', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    cookieConfigured = data.cookies ?? cookieConfigured;
+    cookieBilibili.value = '';
+    cookieXiaohongshu.value = '';
+    renderCookieState();
+    setCookieMessage('已保存，重新解析即可生效', 'ok');
+    setStatus('Cookie 已保存', 'ok');
+    void loadHealth();
+  } catch (error) {
+    setCookieMessage(error instanceof Error ? error.message : String(error), 'error');
+  } finally {
+    cookiesSave.disabled = false;
+  }
+});
+
 function renderHistory(items) {
   if (items.length === 0) {
     historyList.innerHTML = '<p class="history-empty">还没有下载记录。</p>';
@@ -505,9 +608,30 @@ function setHistoryOpen(open) {
   }
 }
 
+cookiesToggle.addEventListener('click', () => {
+  const open = cookiesSection.hidden;
+  if (open) {
+    setHistoryOpen(false);
+    setPlatformsOpen(false);
+  }
+  setCookiesOpen(open);
+  if (!open) cookiesToggle.focus();
+});
+
+cookiesClose.addEventListener('click', () => {
+  setCookiesOpen(false);
+  cookiesToggle.focus();
+});
+
+cookieBilibiliClear.addEventListener('click', () => void clearCookie('bilibili'));
+cookieXiaohongshuClear.addEventListener('click', () => void clearCookie('xiaohongshu'));
+
 platformsToggle.addEventListener('click', () => {
   const open = platformsSection.hidden;
-  if (open) setHistoryOpen(false);
+  if (open) {
+    setHistoryOpen(false);
+    setCookiesOpen(false);
+  }
   setPlatformsOpen(open);
   if (!open) platformsToggle.focus();
 });
@@ -547,6 +671,7 @@ platformSave.addEventListener('click', async () => {
 
 historyToggle.addEventListener('click', () => {
   setPlatformsOpen(false);
+  setCookiesOpen(false);
   setHistoryOpen(historySection.hidden);
 });
 
@@ -860,3 +985,4 @@ if (sharedUrl) {
 resizeInput();
 void loadHealth();
 void loadPlatforms();
+void loadCookies();

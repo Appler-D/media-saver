@@ -678,6 +678,77 @@ button {
   color: var(--error);
 }
 
+.cookie-fields {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.cookie-field {
+  display: grid;
+  gap: 6px;
+}
+
+.cookie-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cookie-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.cookie-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cookie-field-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cookie-field-actions .hint {
+  margin: 0;
+}
+
+.cookie-state {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.cookie-state[data-configured="true"] {
+  color: var(--ok);
+}
+
+.cookie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cookie-actions .platform-message {
+  margin-right: auto;
+}
+
 .import-panel {
   margin-top: 10px;
   padding: 16px 18px;
