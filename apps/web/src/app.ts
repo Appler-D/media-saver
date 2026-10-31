@@ -90,6 +90,16 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
   const publicDir = options.publicDir ?? join(process.cwd(), 'apps', 'web', 'public');
   const app = Fastify({ logger: { level: 'warn' } });
   const jobs = new Map<string, Job>();
+  let downloadQueue: Promise<void> = Promise.resolve();
+
+  function enqueueDownload<T>(task: () => Promise<T>): Promise<T> {
+    const result = downloadQueue.then(task, task);
+    downloadQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
 
   const jobCleanup = setInterval(
     () => {
@@ -203,7 +213,9 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
       }
 
       await mkdir(TEMP_DIR, { recursive: true });
-      const filePath = await downloadVariant(job.item, variant, { outputDir: TEMP_DIR });
+      const filePath = await enqueueDownload(() =>
+        downloadVariant(job.item, variant, { outputDir: TEMP_DIR }),
+      );
       const info = await stat(filePath);
       await recordDownload({
         item: job.item,

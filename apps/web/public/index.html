@@ -28,15 +28,15 @@
 
       <form id="resolve-form" class="input-row">
         <label class="sr-only" for="url">作品链接</label>
-        <input
+        <textarea
           id="url"
           name="url"
-          type="text"
-          placeholder="粘贴作品链接或分享文本…"
+          rows="1"
+          placeholder="粘贴一个或多个作品链接，每行一个…"
           autocomplete="off"
           spellcheck="false"
           required
-        />
+        ></textarea>
         <button id="paste" type="button" class="ghost">粘贴</button>
         <button type="submit" class="primary">解析</button>
       </form>
@@ -57,7 +57,16 @@
         <p>Cookie 只在请求对应平台时使用，不会上传到任何第三方。抖音解析使用本机浏览器的登录态，无需写入 Cookie。</p>
       </details>
 
-      <section id="result" class="result" hidden></section>
+      <section id="result" class="result" hidden>
+        <div id="batch-bar" class="batch-bar" hidden>
+          <div class="batch-copy">
+            <strong>批量下载</strong>
+            <span id="batch-summary"></span>
+          </div>
+          <button id="batch-download" type="button" class="primary">全部下载</button>
+        </div>
+        <div id="result-list" class="result-list"></div>
+      </section>
 
       <section id="history" class="history" aria-label="下载历史" hidden>
         <div class="history-head">
@@ -76,7 +85,6 @@
       </footer>
     </main>
 
-    <iframe id="download-frame" name="download-frame" title="下载文件" hidden></iframe>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

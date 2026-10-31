@@ -3,9 +3,12 @@ const input = document.querySelector('#url');
 const pasteButton = document.querySelector('#paste');
 const statusElement = document.querySelector('#status');
 const resultElement = document.querySelector('#result');
+const resultList = document.querySelector('#result-list');
+const batchBar = document.querySelector('#batch-bar');
+const batchSummary = document.querySelector('#batch-summary');
+const batchDownload = document.querySelector('#batch-download');
 const submitButton = form.querySelector('button[type="submit"]');
 const footerState = document.querySelector('#footer-state');
-const downloadFrame = document.querySelector('#download-frame');
 const historyToggle = document.querySelector('#history-toggle');
 const historySection = document.querySelector('#history');
 const historyList = document.querySelector('#history-list');
@@ -23,8 +26,14 @@ const COOKIE_NAMES = {
   xiaohongshu: '小红书',
 };
 
+const MAX_BATCH = 10;
+const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
+const TRAILING_URL_PUNCTUATION = /[),.;!?，。；！？、]+$/u;
+
 let health = { ffmpeg: false, browser: false, cookies: {} };
 let busy = false;
+let batchBusy = false;
+let resolvedItems = [];
 
 function escapeHtml(value) {
   return String(value ?? '').replace(
@@ -37,6 +46,63 @@ function escapeHtml(value) {
 function setStatus(message, tone = '') {
   statusElement.textContent = message;
   statusElement.dataset.tone = tone;
+}
+
+function extractUrls(value) {
+  const urls = [];
+  const seen = new Set();
+  for (const match of value.match(URL_PATTERN) ?? []) {
+    const url = match.replace(TRAILING_URL_PUNCTUATION, '');
+    const key = url.replace(/\/+$/, '');
+    if (!url || seen.has(key)) continue;
+    seen.add(key);
+    urls.push(url);
+  }
+  return urls;
+}
+
+function isVideo(entry) {
+  return entry.item.kind === 'video' && (entry.item.variants?.length ?? 0) > 0;
+}
+
+function videoEntries() {
+  return resolvedItems.filter(isVideo);
+}
+
+function defaultVariant(item) {
+  const variants = item.variants ?? [];
+  if (variants.length === 0) return undefined;
+  if (health.ffmpeg) return variants[0];
+  return variants.find((variant) => !variant.requiresFfmpeg);
+}
+
+function clearResults() {
+  resolvedItems = [];
+  resultList.innerHTML = '';
+  resultElement.hidden = true;
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const videos = videoEntries();
+  batchBar.hidden = videos.length < 2;
+  batchSummary.textContent = videos.length
+    ? `${videos.length} 个视频 · 优先使用每个视频的最高可用清晰度`
+    : '';
+  batchDownload.disabled = batchBusy || busy || videos.length === 0;
+}
+
+function startDownload(jobId, variantId) {
+  const frame = document.createElement('iframe');
+  frame.hidden = true;
+  frame.title = '下载文件';
+  frame.src = `/api/download/${encodeURIComponent(jobId)}/${encodeURIComponent(variantId)}`;
+  document.body.appendChild(frame);
+  setTimeout(() => frame.remove(), 120_000);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function api(path, options = {}) {
@@ -117,8 +183,8 @@ function renderImages(item, jobId) {
   return `<p class="hint">共 ${images.length} 张图片，点击下载 JPG。</p><div class="thumbs">${thumbs}</div>`;
 }
 
-function bindVariants(jobId) {
-  for (const button of resultElement.querySelectorAll('.variant')) {
+function bindVariants(jobId, card) {
+  for (const button of card.querySelectorAll('.variant')) {
     button.addEventListener('click', () => {
       if (button.dataset.disabled === '1') {
         setStatus('这个版本需要 ffmpeg 合并音视频，请先安装 ffmpeg，或选择单文件版本。', 'error');
@@ -130,7 +196,7 @@ function bindVariants(jobId) {
       const label = button.querySelector('.variant-label');
       const original = label.textContent;
       label.textContent = '准备下载…';
-      downloadFrame.src = `/api/download/${encodeURIComponent(jobId)}/${encodeURIComponent(button.dataset.variant)}`;
+      startDownload(jobId, button.dataset.variant);
       setStatus('正在准备文件，稍后会出现在浏览器下载列表中。', 'ok');
 
       setTimeout(() => {
@@ -141,7 +207,7 @@ function bindVariants(jobId) {
   }
 }
 
-function render(item, jobId) {
+function cardHtml(item, jobId) {
   const cover = item.coverUrl
     ? `<img class="cover" src="/api/cover/${encodeURIComponent(jobId)}" alt="" loading="lazy" />`
     : '<div class="cover cover-empty"></div>';
@@ -149,7 +215,7 @@ function render(item, jobId) {
     .filter(Boolean)
     .join(' · ');
 
-  resultElement.innerHTML = `
+  return `
     <article class="card">
       <header class="card-head">
         ${cover}
@@ -165,11 +231,79 @@ function render(item, jobId) {
       ${item.kind === 'images' ? renderImages(item, jobId) : renderVariants(item)}
     </article>
   `;
-
-  const coverImage = resultElement.querySelector('.cover');
-  coverImage?.addEventListener('error', () => coverImage.remove(), { once: true });
-  bindVariants(jobId);
 }
+
+function addResult(item, jobId) {
+  resultList.insertAdjacentHTML('beforeend', cardHtml(item, jobId));
+  const card = resultList.lastElementChild;
+  if (!card) return;
+
+  const coverImage = card.querySelector('.cover');
+  coverImage?.addEventListener('error', () => coverImage.remove(), { once: true });
+  bindVariants(jobId, card);
+  resolvedItems.push({ jobId, item });
+  resultElement.hidden = false;
+  updateBatchBar();
+}
+
+function addResultError(url, message) {
+  resultList.insertAdjacentHTML(
+    'beforeend',
+    `<article class="card error-card">
+      <div class="badges"><span class="badge ghost">解析失败</span></div>
+      <h2>无法解析这个链接</h2>
+      <p class="error-url">${escapeHtml(url)}</p>
+      <p class="hint warn">${escapeHtml(message)}</p>
+    </article>`,
+  );
+  resultElement.hidden = false;
+}
+
+batchDownload.addEventListener('click', async () => {
+  if (batchBusy || busy) return;
+  const videos = videoEntries();
+  if (videos.length < 2) return;
+
+  batchBusy = true;
+  batchDownload.disabled = true;
+  submitButton.disabled = true;
+  batchDownload.textContent = '正在发起…';
+
+  let started = 0;
+  let skipped = 0;
+  try {
+    for (const [index, entry] of videos.entries()) {
+      const variant = defaultVariant(entry.item);
+      if (!variant) {
+        skipped += 1;
+        continue;
+      }
+
+      startDownload(entry.jobId, variant.id);
+      started += 1;
+      setStatus(`正在发起下载 ${index + 1}/${videos.length}…`, 'ok');
+      if (index < videos.length - 1) await sleep(1200);
+    }
+
+    if (started) {
+      const skippedText = skipped ? `，跳过 ${skipped} 个（没有可用版本）` : '';
+      setStatus(
+        `已发起 ${started} 个下载${skippedText}。浏览器如提示多文件下载，请选择允许。`,
+        'ok',
+      );
+    } else {
+      setStatus(
+        skipped ? `没有可批量下载的视频：${skipped} 个缺少可用版本` : '没有可批量下载的视频',
+        'error',
+      );
+    }
+  } finally {
+    batchBusy = false;
+    submitButton.disabled = false;
+    batchDownload.textContent = '全部下载';
+    updateBatchBar();
+  }
+});
 
 async function loadHealth() {
   try {
@@ -281,6 +415,7 @@ historyList.addEventListener('click', (event) => {
     const url = target.dataset.url;
     if (!url) return;
     input.value = url;
+    resizeInput();
     setHistoryOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     form.requestSubmit();
@@ -321,35 +456,76 @@ historyList.addEventListener('click', (event) => {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const url = input.value.trim();
-  if (!url || busy) return;
+  const raw = input.value.trim();
+  if (!raw || busy || batchBusy) return;
+
+  const urls = extractUrls(raw);
+  if (urls.length === 0) urls.push(raw);
+  if (urls.length > MAX_BATCH) {
+    setStatus(`一次最多解析 ${MAX_BATCH} 个链接，请分批粘贴。`, 'error');
+    return;
+  }
 
   busy = true;
   submitButton.disabled = true;
-  submitButton.textContent = '解析中…';
-  resultElement.hidden = true;
-  setStatus('正在解析链接…');
+  submitButton.textContent = urls.length > 1 ? '批量解析中…' : '解析中…';
+  clearResults();
+  setStatus(urls.length > 1 ? `正在解析 1/${urls.length}…` : '正在解析链接…');
 
   const slowTimer = setTimeout(() => {
     if (busy) setStatus('部分平台需要启动本机浏览器，首次解析可能多等几秒…');
   }, 4500);
 
+  let succeeded = 0;
+  let failed = 0;
   try {
-    const data = await api('/api/resolve', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    render(data.item, data.jobId);
-    resultElement.hidden = false;
-    setStatus('');
-  } catch (error) {
-    setStatus(error instanceof Error ? error.message : String(error), 'error');
+    for (const [index, url] of urls.entries()) {
+      if (urls.length > 1) setStatus(`正在解析 ${index + 1}/${urls.length}…`);
+      try {
+        const data = await api('/api/resolve', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        addResult(data.item, data.jobId);
+        succeeded += 1;
+      } catch (error) {
+        addResultError(url, error instanceof Error ? error.message : String(error));
+        failed += 1;
+      }
+    }
+
+    if (urls.length === 1) {
+      if (succeeded === 0) setStatus('解析失败', 'error');
+      else setStatus('');
+    } else {
+      const parts = [`已解析 ${succeeded} 个链接`];
+      if (failed > 0) parts.push(`${failed} 个失败`);
+      const videos = videoEntries().length;
+      if (videos > 1) parts.push(`可批量下载 ${videos} 个视频`);
+      setStatus(parts.join('，'), failed > 0 ? 'error' : 'ok');
+    }
   } finally {
     clearTimeout(slowTimer);
     busy = false;
     submitButton.disabled = false;
     submitButton.textContent = '解析';
+    updateBatchBar();
+    resizeInput();
+  }
+});
+
+function resizeInput() {
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 168)}px`;
+}
+
+input.addEventListener('input', resizeInput);
+window.addEventListener('resize', resizeInput);
+input.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    form.requestSubmit();
   }
 });
 
@@ -358,6 +534,7 @@ pasteButton.addEventListener('click', async () => {
     const text = await navigator.clipboard.readText();
     if (text.trim()) {
       input.value = text.trim();
+      resizeInput();
       input.focus();
     }
   } catch {
@@ -369,7 +546,9 @@ pasteButton.addEventListener('click', async () => {
 const sharedUrl = new URLSearchParams(location.search).get('url');
 if (sharedUrl) {
   input.value = sharedUrl;
+  resizeInput();
   form.requestSubmit();
 }
 
+resizeInput();
 void loadHealth();

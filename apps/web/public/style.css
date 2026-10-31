@@ -117,6 +117,7 @@ body {
 
 .input-row {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   margin-top: 30px;
   padding: 8px;
@@ -126,19 +127,24 @@ body {
   box-shadow: var(--shadow);
 }
 
-.input-row input {
+.input-row textarea {
   flex: 1;
   min-width: 0;
+  min-height: 48px;
+  max-height: 168px;
   padding: 12px 14px;
   border: 0;
   background: transparent;
   color: var(--ink);
   font: inherit;
   font-size: 15px;
+  line-height: 1.5;
   outline: none;
+  overflow-y: auto;
+  resize: none;
 }
 
-.input-row input::placeholder {
+.input-row textarea::placeholder {
   color: color-mix(in srgb, var(--muted) 75%, transparent);
 }
 
@@ -265,6 +271,56 @@ button {
 
 .result {
   margin-top: 18px;
+}
+
+.result-list {
+  display: grid;
+  gap: 18px;
+}
+
+.batch-bar[hidden] {
+  display: none;
+}
+
+.batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.batch-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.batch-copy strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.batch-bar .primary {
+  flex: 0 0 auto;
+}
+
+.error-card {
+  border-color: color-mix(in srgb, var(--error) 35%, var(--line));
+}
+
+.error-url {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .card {
@@ -618,14 +674,24 @@ button {
     flex-wrap: wrap;
   }
 
-  .input-row input {
+  .input-row textarea {
     flex-basis: 100%;
+    max-height: 140px;
     padding: 12px 10px;
   }
 
   .input-row .ghost,
   .input-row .primary {
     flex: 1;
+  }
+
+  .batch-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .batch-bar .primary {
+    width: 100%;
   }
 
   .card {
