@@ -115,6 +115,13 @@ body {
   gap: 12px;
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .input-row {
   display: flex;
   align-items: flex-end;
@@ -534,6 +541,91 @@ button {
   transform: scale(1.025);
 }
 
+.platforms {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.platforms-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.platforms-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.platforms-head h2:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.platforms > .hint {
+  margin-top: 8px;
+}
+
+.platform-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.platform-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.platform-option:hover {
+  background: var(--surface-2);
+}
+
+.platform-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.platform-option span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.platforms-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.platform-message {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.platform-message[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.platform-message[data-tone="error"] {
+  color: var(--error);
+}
+
 .history {
   margin-top: 18px;
   padding: 20px;
@@ -728,11 +820,13 @@ button {
     flex-wrap: nowrap;
   }
 
-  .history {
+  .history,
+  .platforms {
     padding: 16px;
   }
 
-  .history-head {
+  .history-head,
+  .platforms-head {
     align-items: flex-start;
   }
 

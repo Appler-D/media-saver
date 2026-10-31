@@ -9,6 +9,13 @@ const batchSummary = document.querySelector('#batch-summary');
 const batchDownload = document.querySelector('#batch-download');
 const submitButton = form.querySelector('button[type="submit"]');
 const footerState = document.querySelector('#footer-state');
+const platformSummary = document.querySelector('#platform-summary');
+const platformsToggle = document.querySelector('#platforms-toggle');
+const platformsSection = document.querySelector('#platforms');
+const platformList = document.querySelector('#platform-list');
+const platformSave = document.querySelector('#platforms-save');
+const platformClose = document.querySelector('#platforms-close');
+const platformMessage = document.querySelector('#platform-message');
 const historyToggle = document.querySelector('#history-toggle');
 const historySection = document.querySelector('#history');
 const historyList = document.querySelector('#history-list');
@@ -31,6 +38,7 @@ const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
 const TRAILING_URL_PUNCTUATION = /[),.;!?，。；！？、]+$/u;
 
 let health = { ffmpeg: false, browser: false, cookies: {} };
+let platforms = [];
 let busy = false;
 let batchBusy = false;
 let resolvedItems = [];
@@ -324,6 +332,45 @@ async function loadHealth() {
   footerState.dataset.warn = String(!health.ffmpeg || !health.browser);
 }
 
+function setPlatformMessage(message, tone = '') {
+  platformMessage.textContent = message;
+  platformMessage.dataset.tone = tone;
+}
+
+function renderPlatforms() {
+  platformList.innerHTML = platforms
+    .map(
+      (platform) => `<label class="platform-option">
+        <input type="checkbox" value="${escapeHtml(platform.id)}" ${platform.enabled ? 'checked' : ''} />
+        <span>${escapeHtml(platform.name)}</span>
+      </label>`,
+    )
+    .join('');
+
+  const names = platforms.filter((platform) => platform.enabled).map((platform) => platform.name);
+  platformSummary.textContent = names.length ? names.join(' · ') : '尚未启用平台';
+}
+
+async function loadPlatforms() {
+  try {
+    const data = await api('/api/platforms');
+    platforms = Array.isArray(data.platforms) ? data.platforms : [];
+    renderPlatforms();
+  } catch {
+    // 页面仍可打开；保存时会再次提示服务错误
+  }
+}
+
+function setPlatformsOpen(open) {
+  platformsSection.hidden = !open;
+  platformsToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    setPlatformMessage('');
+    renderPlatforms();
+    platformsSection.querySelector('h2')?.focus();
+  }
+}
+
 function renderHistory(items) {
   if (items.length === 0) {
     historyList.innerHTML = '<p class="history-empty">还没有下载记录。</p>';
@@ -385,7 +432,48 @@ function setHistoryOpen(open) {
   }
 }
 
+platformsToggle.addEventListener('click', () => {
+  const open = platformsSection.hidden;
+  if (open) setHistoryOpen(false);
+  setPlatformsOpen(open);
+  if (!open) platformsToggle.focus();
+});
+
+platformClose.addEventListener('click', () => {
+  setPlatformsOpen(false);
+  platformsToggle.focus();
+});
+
+platformSave.addEventListener('click', async () => {
+  const enabled = [...platformList.querySelectorAll('input[type="checkbox"]')]
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+  if (enabled.length === 0) {
+    setPlatformMessage('至少保留一个平台', 'error');
+    return;
+  }
+
+  platformSave.disabled = true;
+  setPlatformMessage('正在保存…');
+  try {
+    const data = await api('/api/platforms', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    platforms = Array.isArray(data.platforms) ? data.platforms : platforms;
+    renderPlatforms();
+    setPlatformMessage('已保存', 'ok');
+    setStatus('平台设置已保存', 'ok');
+  } catch (error) {
+    setPlatformMessage(error instanceof Error ? error.message : String(error), 'error');
+  } finally {
+    platformSave.disabled = false;
+  }
+});
+
 historyToggle.addEventListener('click', () => {
+  setPlatformsOpen(false);
   setHistoryOpen(historySection.hidden);
 });
 
@@ -552,3 +640,4 @@ if (sharedUrl) {
 
 resizeInput();
 void loadHealth();
+void loadPlatforms();

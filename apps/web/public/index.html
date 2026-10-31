@@ -12,18 +12,29 @@
       <header class="hero">
         <div class="hero-top">
           <div class="brand"><span class="brand-mark" aria-hidden="true"></span>MediaSaver</div>
-          <button
-            id="history-toggle"
-            type="button"
-            class="ghost small"
-            aria-controls="history"
-            aria-expanded="false"
-          >
-            历史记录
-          </button>
+          <div class="hero-actions">
+            <button
+              id="platforms-toggle"
+              type="button"
+              class="ghost small"
+              aria-controls="platforms"
+              aria-expanded="false"
+            >
+              平台管理
+            </button>
+            <button
+              id="history-toggle"
+              type="button"
+              class="ghost small"
+              aria-controls="history"
+              aria-expanded="false"
+            >
+              历史记录
+            </button>
+          </div>
         </div>
         <h1>把链接粘进来，<br />拿走你想要的内容。</h1>
-        <p class="sub">抖音 · 小红书 · 哔哩哔哩　本地运行，数据不出本机</p>
+        <p class="sub"><span id="platform-summary">抖音 · 哔哩哔哩 · 小红书</span>　本地运行，数据不出本机</p>
       </header>
 
       <form id="resolve-form" class="input-row">
@@ -66,6 +77,19 @@
           <button id="batch-download" type="button" class="primary">全部下载</button>
         </div>
         <div id="result-list" class="result-list"></div>
+      </section>
+
+      <section id="platforms" class="platforms" aria-label="平台管理" hidden>
+        <div class="platforms-head">
+          <h2 tabindex="-1">平台管理</h2>
+          <button id="platforms-close" type="button" class="ghost small">收起</button>
+        </div>
+        <p class="hint">停用的平台不会出现在解析入口，也不会响应新的解析请求；历史记录会保留。</p>
+        <div id="platform-list" class="platform-list"></div>
+        <div class="platforms-actions">
+          <span id="platform-message" class="platform-message" role="status" aria-live="polite"></span>
+          <button id="platforms-save" type="button" class="primary">保存</button>
+        </div>
       </section>
 
       <section id="history" class="history" aria-label="下载历史" hidden>
