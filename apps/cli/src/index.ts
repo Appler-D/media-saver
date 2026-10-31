@@ -40,6 +40,15 @@ async function readCookie(platform: PlatformId): Promise<string | undefined> {
   }
 }
 
+function dateFolder(): string {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 function formatDuration(seconds: number): string {
   const total = Math.max(0, Math.round(seconds));
   const hours = Math.floor(total / 3600);
@@ -152,7 +161,7 @@ async function main(): Promise<void> {
           return;
         }
 
-        const outputDir = resolvePath(options.out);
+        const outputDir = join(resolvePath(options.out), dateFolder());
         let lastLine = '';
         const onProgress = (progress: DownloadProgress): void => {
           if (!process.stdout.isTTY) return;

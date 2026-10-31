@@ -63,6 +63,16 @@ function downloadDir(): string {
   return downloadDirectoryOverride ?? join(electronApp.getPath('downloads'), 'MediaSaver');
 }
 
+function todayDir(): string {
+  const now = new Date();
+  const date = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+  return join(downloadDir(), date);
+}
+
 function openDownloads(): void {
   const directory = downloadDir();
   mkdirSync(directory, { recursive: true });
@@ -208,7 +218,7 @@ async function start(): Promise<void> {
   console.log('[desktop] download directory:', directory);
 
   session.defaultSession.on('will-download', (_event, item) => {
-    const targetDirectory = downloadDir();
+    const targetDirectory = todayDir();
     mkdirSync(targetDirectory, { recursive: true });
     const filename = basename(item.getFilename()) || 'download';
     const target = uniquePath(join(targetDirectory, filename));
