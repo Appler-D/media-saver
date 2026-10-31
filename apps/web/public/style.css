@@ -526,6 +526,11 @@ button {
   margin-top: 16px;
 }
 
+.thumb-item {
+  position: relative;
+  min-width: 0;
+}
+
 .thumb {
   display: block;
   aspect-ratio: 3 / 4;
@@ -533,6 +538,48 @@ button {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface-2);
+}
+
+.thumb-pick {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--ink);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.thumb-pick input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.image-count {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.primary.small {
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-size: 12px;
 }
 
 .thumb img {

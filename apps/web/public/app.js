@@ -194,15 +194,26 @@ function renderImages(item, jobId) {
   const images = item.images ?? [];
   const thumbs = images
     .map(
-      (
-        image,
-      ) => `<a class="thumb" href="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}?download=1&format=jpg" title="${escapeHtml(image.label ?? '下载图片')}">
-        <img src="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}" alt="${escapeHtml(image.label ?? '')}" loading="lazy" />
-      </a>`,
+      (image) => `<div class="thumb-item">
+        <a class="thumb" href="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}?download=1&format=jpg" title="${escapeHtml(image.label ?? '下载图片')}">
+          <img src="/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(image.id)}" alt="${escapeHtml(image.label ?? '')}" loading="lazy" />
+        </a>
+        <label class="thumb-pick">
+          <input type="checkbox" data-image-id="${escapeHtml(image.id)}" checked />
+          <span>选择</span>
+        </label>
+      </div>`,
     )
     .join('');
 
-  return `<p class="hint">共 ${images.length} 张图片，点击下载 JPG。</p><div class="thumbs">${thumbs}</div>`;
+  return `<p class="hint">共 ${images.length} 张图片，可全选或勾选后保存 JPG。</p>
+    <div class="thumbs">${thumbs}</div>
+    <div class="image-actions">
+      <span class="image-count" data-image-count>已选 ${images.length} / ${images.length}</span>
+      <button type="button" class="ghost small" data-image-toggle-all>取消全选</button>
+      <button type="button" class="primary small" data-image-save="all">全部保存</button>
+      <button type="button" class="primary small" data-image-save="selected">保存选中</button>
+    </div>`;
 }
 
 function bindVariants(jobId, card) {
@@ -255,6 +266,53 @@ function cardHtml(item, jobId) {
   `;
 }
 
+function updateImageCount(card) {
+  const inputs = [...card.querySelectorAll('[data-image-id]')];
+  const selected = inputs.filter((input) => input.checked).length;
+  const count = card.querySelector('[data-image-count]');
+  if (count) count.textContent = `已选 ${selected} / ${inputs.length}`;
+  const toggle = card.querySelector('[data-image-toggle-all]');
+  if (toggle) toggle.textContent = selected === inputs.length ? '取消全选' : '全选';
+}
+
+function bindImages(jobId, card) {
+  const inputs = [...card.querySelectorAll('[data-image-id]')];
+  if (inputs.length === 0) return;
+
+  for (const input of inputs) {
+    input.addEventListener('change', () => updateImageCount(card));
+  }
+
+  card.querySelector('[data-image-toggle-all]')?.addEventListener('click', () => {
+    const allSelected = inputs.every((input) => input.checked);
+    for (const input of inputs) input.checked = !allSelected;
+    updateImageCount(card);
+  });
+
+  for (const button of card.querySelectorAll('[data-image-save]')) {
+    button.addEventListener('click', async () => {
+      if (button.dataset.busy === '1') return;
+      const selected = inputs.filter((input) => input.checked);
+      const targets = button.dataset.imageSave === 'all' ? inputs : selected;
+      if (targets.length === 0) {
+        setStatus('请至少选择一张图片。', 'error');
+        return;
+      }
+
+      button.dataset.busy = '1';
+      for (const [index, input] of targets.entries()) {
+        startFrameDownload(
+          `/api/image/${encodeURIComponent(jobId)}/${encodeURIComponent(input.dataset.imageId)}?download=1&format=jpg`,
+        );
+        setStatus(`正在发起图片下载 ${index + 1}/${targets.length}…`, 'ok');
+        if (index < targets.length - 1) await sleep(900);
+      }
+      setStatus(`已发起 ${targets.length} 张图片下载，稍后会出现在下载列表。`, 'ok');
+      button.dataset.busy = '0';
+    });
+  }
+}
+
 function addResult(item, jobId) {
   resultList.insertAdjacentHTML('beforeend', cardHtml(item, jobId));
   const card = resultList.lastElementChild;
@@ -263,6 +321,7 @@ function addResult(item, jobId) {
   const coverImage = card.querySelector('.cover');
   coverImage?.addEventListener('error', () => coverImage.remove(), { once: true });
   bindVariants(jobId, card);
+  bindImages(jobId, card);
   resolvedItems.push({ jobId, item });
   resultElement.hidden = false;
   updateBatchBar();
