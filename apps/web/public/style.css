@@ -155,6 +155,11 @@ body {
   color: color-mix(in srgb, var(--muted) 75%, transparent);
 }
 
+.input-row.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 button {
   font: inherit;
   cursor: pointer;
@@ -626,6 +631,86 @@ button {
   color: var(--error);
 }
 
+.import-panel {
+  margin-top: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.import-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.import-head strong {
+  font-size: 14px;
+}
+
+.import-head .ghost {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.import-head .hint {
+  margin: 6px 0 0;
+}
+
+.import-list {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.link-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.link-option:hover {
+  background: var(--surface-2);
+}
+
+.link-option input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.link-url {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.import-actions .platform-message {
+  margin-right: auto;
+}
+
 .history {
   margin-top: 18px;
   padding: 20px;
@@ -828,6 +913,14 @@ button {
   .history-head,
   .platforms-head {
     align-items: flex-start;
+  }
+
+  .import-panel {
+    padding: 14px;
+  }
+
+  .import-head {
+    gap: 8px;
   }
 
   .history-item {

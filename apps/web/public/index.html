@@ -48,11 +48,34 @@
           spellcheck="false"
           required
         ></textarea>
+        <button id="import-file" type="button" class="ghost">导入文件</button>
         <button id="paste" type="button" class="ghost">粘贴</button>
         <button type="submit" class="primary">解析</button>
+        <input
+          id="file-input"
+          type="file"
+          accept=".txt,.md,.markdown,text/plain,text/markdown"
+          hidden
+        />
       </form>
 
       <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <section id="import-panel" class="import-panel" aria-label="文件链接" hidden>
+        <div class="import-head">
+          <div>
+            <strong>文件链接</strong>
+            <p id="import-note" class="hint"></p>
+          </div>
+          <button id="import-clear" type="button" class="ghost small">取消导入</button>
+        </div>
+        <div id="import-list" class="import-list"></div>
+        <div class="import-actions">
+          <span id="import-count" class="platform-message" role="status" aria-live="polite"></span>
+          <button id="import-toggle" type="button" class="ghost small">全选</button>
+          <button id="import-parse" type="button" class="primary">解析选中</button>
+        </div>
+      </section>
 
       <details class="help">
         <summary>高清需要登录？配置 Cookie</summary>
@@ -96,6 +119,7 @@
         <div class="history-head">
           <h2 tabindex="-1">下载历史</h2>
           <div class="history-actions">
+            <button id="history-export" type="button" class="ghost small">导出 JSON</button>
             <button id="history-clear" type="button" class="ghost small">清空</button>
             <button id="history-close" type="button" class="ghost small">收起</button>
           </div>

@@ -245,6 +245,18 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
     return { items: history.items.slice(0, 50) };
   });
 
+  app.get('/api/history/export', async (_request, reply) => {
+    const history = await readHistory();
+    const exportedAt = new Date().toISOString();
+    reply.header('content-type', 'application/json; charset=utf-8');
+    reply.header(
+      'content-disposition',
+      attachment(`media-saver-history-${exportedAt.slice(0, 10)}.json`),
+    );
+    reply.header('cache-control', 'no-store');
+    return { exportedAt, ...history };
+  });
+
   app.delete('/api/history', async () => {
     await clearHistory();
     return { ok: true };

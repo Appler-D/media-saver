@@ -16,9 +16,19 @@ const platformList = document.querySelector('#platform-list');
 const platformSave = document.querySelector('#platforms-save');
 const platformClose = document.querySelector('#platforms-close');
 const platformMessage = document.querySelector('#platform-message');
+const importFileButton = document.querySelector('#import-file');
+const fileInput = document.querySelector('#file-input');
+const importPanel = document.querySelector('#import-panel');
+const importNote = document.querySelector('#import-note');
+const importList = document.querySelector('#import-list');
+const importCount = document.querySelector('#import-count');
+const importToggle = document.querySelector('#import-toggle');
+const importParse = document.querySelector('#import-parse');
+const importClear = document.querySelector('#import-clear');
 const historyToggle = document.querySelector('#history-toggle');
 const historySection = document.querySelector('#history');
 const historyList = document.querySelector('#history-list');
+const historyExport = document.querySelector('#history-export');
 const historyClear = document.querySelector('#history-clear');
 const historyClose = document.querySelector('#history-close');
 
@@ -33,7 +43,7 @@ const COOKIE_NAMES = {
   xiaohongshu: '小红书',
 };
 
-const MAX_BATCH = 10;
+const MAX_BATCH = 20;
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
 const TRAILING_URL_PUNCTUATION = /[),.;!?，。；！？、]+$/u;
 
@@ -100,13 +110,17 @@ function updateBatchBar() {
   batchDownload.disabled = batchBusy || busy || videos.length === 0;
 }
 
-function startDownload(jobId, variantId) {
+function startFrameDownload(path) {
   const frame = document.createElement('iframe');
   frame.hidden = true;
   frame.title = '下载文件';
-  frame.src = `/api/download/${encodeURIComponent(jobId)}/${encodeURIComponent(variantId)}`;
+  frame.src = path;
   document.body.appendChild(frame);
   setTimeout(() => frame.remove(), 120_000);
+}
+
+function startDownload(jobId, variantId) {
+  startFrameDownload(`/api/download/${encodeURIComponent(jobId)}/${encodeURIComponent(variantId)}`);
 }
 
 function sleep(ms) {
@@ -482,6 +496,15 @@ historyClose.addEventListener('click', () => {
   historyToggle.focus();
 });
 
+historyExport.addEventListener('click', () => {
+  startFrameDownload('/api/history/export');
+  setStatus('正在导出历史…', 'ok');
+  historyExport.disabled = true;
+  setTimeout(() => {
+    historyExport.disabled = false;
+  }, 2000);
+});
+
 historyClear.addEventListener('click', async () => {
   if (!window.confirm('清空所有下载历史？')) return;
   try {
@@ -542,7 +565,7 @@ historyList.addEventListener('click', (event) => {
   }
 });
 
-form.addEventListener('submit', async (event) => {
+form.addEventListener('submit', (event) => {
   event.preventDefault();
   const raw = input.value.trim();
   if (!raw || busy || batchBusy) return;
@@ -553,9 +576,19 @@ form.addEventListener('submit', async (event) => {
     setStatus(`一次最多解析 ${MAX_BATCH} 个链接，请分批粘贴。`, 'error');
     return;
   }
+  void resolveUrls(urls);
+});
+
+async function resolveUrls(urls) {
+  if (busy || batchBusy || urls.length === 0) return;
+  if (urls.length > MAX_BATCH) {
+    setStatus(`一次最多解析 ${MAX_BATCH} 个链接，请分批粘贴。`, 'error');
+    return;
+  }
 
   busy = true;
   submitButton.disabled = true;
+  updateImportSelection();
   submitButton.textContent = urls.length > 1 ? '批量解析中…' : '解析中…';
   clearResults();
   setStatus(urls.length > 1 ? `正在解析 1/${urls.length}…` : '正在解析链接…');
@@ -599,8 +632,135 @@ form.addEventListener('submit', async (event) => {
     submitButton.disabled = false;
     submitButton.textContent = '解析';
     updateBatchBar();
+    updateImportSelection();
     resizeInput();
   }
+}
+
+function selectedImportUrls() {
+  return [...importList.querySelectorAll('input[type="checkbox"]')]
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+}
+
+function updateImportSelection() {
+  const selected = selectedImportUrls().length;
+  const total = importList.querySelectorAll('input[type="checkbox"]').length;
+  importCount.textContent = total ? `已选 ${selected} / ${total}` : '';
+  importCount.dataset.tone = selected ? '' : 'error';
+  importToggle.textContent = selected > 0 ? '取消全选' : '全选';
+  importParse.disabled = selected === 0 || busy || batchBusy;
+}
+
+function renderImportLinks(urls, sourceName) {
+  importNote.textContent =
+    urls.length > MAX_BATCH
+      ? `从 ${sourceName} 识别到 ${urls.length} 个链接，已默认勾选前 ${MAX_BATCH} 个；一次最多解析 ${MAX_BATCH} 个。`
+      : `从 ${sourceName} 识别到 ${urls.length} 个链接，勾选后点“解析选中”。`;
+  importList.innerHTML = urls
+    .map(
+      (url, index) => `<label class="link-option">
+        <input type="checkbox" value="${escapeHtml(url)}" ${index < MAX_BATCH ? 'checked' : ''} />
+        <span class="link-url">${escapeHtml(url)}</span>
+      </label>`,
+    )
+    .join('');
+  importPanel.hidden = false;
+  updateImportSelection();
+}
+
+async function loadLinkFile(file) {
+  if (busy || batchBusy) {
+    setStatus('请等待当前任务完成后再导入文件。', 'error');
+    return;
+  }
+  const isTextFile =
+    file.type.startsWith('text/') || /\.(txt|md|markdown|text|log|csv)$/i.test(file.name);
+  if (!isTextFile) {
+    setStatus('只支持 .txt / .md 等文本文件。', 'error');
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    setStatus('文件过大，请控制在 2MB 以内。', 'error');
+    return;
+  }
+
+  setStatus(`正在读取 ${file.name}…`);
+  try {
+    const text = await file.text();
+    const urls = extractUrls(text);
+    if (urls.length === 0) {
+      setStatus('文件里没有找到链接。', 'error');
+      return;
+    }
+    clearResults();
+    renderImportLinks(urls, file.name);
+    setStatus(`已识别 ${urls.length} 个链接，勾选后点“解析选中”。`, 'ok');
+  } catch (error) {
+    setStatus(`读取文件失败：${error instanceof Error ? error.message : String(error)}`, 'error');
+  }
+}
+
+importFileButton.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files?.[0];
+  fileInput.value = '';
+  if (file) void loadLinkFile(file);
+});
+
+importList.addEventListener('change', (event) => {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  if (!input) return;
+  if (selectedImportUrls().length > MAX_BATCH) {
+    input.checked = false;
+    setStatus(`一次最多选择 ${MAX_BATCH} 个链接。`, 'error');
+  }
+  updateImportSelection();
+});
+
+importToggle.addEventListener('click', () => {
+  const boxes = [...importList.querySelectorAll('input[type="checkbox"]')];
+  const hasSelected = boxes.some((box) => box.checked);
+  boxes.forEach((box, index) => {
+    box.checked = hasSelected ? false : index < MAX_BATCH;
+  });
+  updateImportSelection();
+});
+
+importParse.addEventListener('click', () => {
+  const selected = selectedImportUrls();
+  if (selected.length === 0) {
+    importCount.textContent = '至少选择一个链接';
+    importCount.dataset.tone = 'error';
+    return;
+  }
+  if (busy || batchBusy) return;
+
+  input.value = selected.join('\n');
+  resizeInput();
+  setStatus(`正在解析选中的 ${selected.length} 个链接…`);
+  void resolveUrls(selected);
+});
+
+importClear.addEventListener('click', () => {
+  importPanel.hidden = true;
+  importList.innerHTML = '';
+  importNote.textContent = '';
+  importCount.textContent = '';
+  importCount.dataset.tone = '';
+  importFileButton.focus();
+});
+
+form.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  form.classList.add('dragging');
+});
+form.addEventListener('dragleave', () => form.classList.remove('dragging'));
+form.addEventListener('drop', (event) => {
+  event.preventDefault();
+  form.classList.remove('dragging');
+  const file = event.dataTransfer?.files?.[0];
+  if (file) void loadLinkFile(file);
 });
 
 function resizeInput() {
