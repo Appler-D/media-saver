@@ -240,8 +240,13 @@ export async function captureDouyinNote(
       await page.setUserAgent(await browserUserAgent(browser));
       await page.setViewport({ width: 1280, height: 900 });
       let capturedMusic: DouyinItem['music'] | undefined;
+      let capturedAudioUrl: string | undefined;
+      const isAudioUrl = (value: string): boolean => /\.(mp3|m4a|aac)(\?|$)/i.test(value);
       const musicListener = (response: import('puppeteer-core').HTTPResponse): void => {
         const responseUrl = response.url();
+        if (!capturedAudioUrl && isAudioUrl(responseUrl)) {
+          capturedAudioUrl = responseUrl;
+        }
         if (
           !responseUrl.includes('/aweme/v1/web/aweme/post/') &&
           !responseUrl.includes('/aweme/v1/web/aweme/detail/')
@@ -278,6 +283,12 @@ export async function captureDouyinNote(
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
       page.off('response', musicListener);
+      if (!capturedAudioUrl) {
+        const resources = (await page.evaluate(() =>
+          performance.getEntriesByType('resource').map((entry) => entry.name),
+        )) as string[];
+        capturedAudioUrl = resources.find(isAudioUrl);
+      }
 
       const data = (await page.evaluate(NOTE_COLLECT)) as {
         images?: Array<{ url: string; width: number; height: number; alt?: string }>;
@@ -294,7 +305,9 @@ export async function captureDouyinNote(
       return {
         aweme_id: awemeId,
         desc: title,
-        music: capturedMusic,
+        music:
+          capturedMusic ??
+          (capturedAudioUrl ? { play_url: { url_list: [capturedAudioUrl] } } : undefined),
         images: images.map((image) => ({
           url_list: [image.url],
           width: image.width,
