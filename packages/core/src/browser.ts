@@ -239,6 +239,34 @@ export async function captureDouyinNote(
     try {
       await page.setUserAgent(await browserUserAgent(browser));
       await page.setViewport({ width: 1280, height: 900 });
+      let capturedMusic: DouyinItem['music'] | undefined;
+      const musicListener = (response: import('puppeteer-core').HTTPResponse): void => {
+        const responseUrl = response.url();
+        if (
+          !responseUrl.includes('/aweme/v1/web/aweme/post/') &&
+          !responseUrl.includes('/aweme/v1/web/aweme/detail/')
+        ) {
+          return;
+        }
+        response
+          .json()
+          .then((payload) => {
+            const data = payload as {
+              aweme_list?: DouyinItem[];
+              aweme_detail?: DouyinItem;
+            };
+            const list = Array.isArray(data.aweme_list)
+              ? data.aweme_list
+              : data.aweme_detail
+                ? [data.aweme_detail]
+                : [];
+            const match = list.find((item) => String(item.aweme_id ?? '') === awemeId);
+            if (match?.music) capturedMusic = match.music;
+          })
+          .catch(() => {});
+      };
+      page.on('response', musicListener);
+
       const target = `https://www.douyin.com/note/${awemeId}`;
       options.log?.(`抖音：打开 ${target}`);
       await page.goto(target, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
@@ -246,6 +274,10 @@ export async function captureDouyinNote(
         .waitForFunction(NOTE_READY, { timeout: Math.min(timeoutMs, 20_000) })
         .catch(() => {});
       await new Promise((resolve) => setTimeout(resolve, 2500));
+      if (!capturedMusic) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      page.off('response', musicListener);
 
       const data = (await page.evaluate(NOTE_COLLECT)) as {
         images?: Array<{ url: string; width: number; height: number; alt?: string }>;
@@ -262,6 +294,7 @@ export async function captureDouyinNote(
       return {
         aweme_id: awemeId,
         desc: title,
+        music: capturedMusic,
         images: images.map((image) => ({
           url_list: [image.url],
           width: image.width,

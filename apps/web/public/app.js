@@ -184,6 +184,9 @@ function renderVariants(item) {
       '<p class="hint warn">未检测到 ffmpeg：高清 DASH 版本需要先安装 ffmpeg，或选择“单文件”版本。</p>',
     );
   }
+  if (item.platform === 'douyin' && !health.ffmpeg) {
+    hints.push('<p class="hint warn">提取音频需要 ffmpeg。</p>');
+  }
 
   const rows = variants
     .map((variant) => {
@@ -199,7 +202,16 @@ function renderVariants(item) {
     })
     .join('');
 
-  return `${hints.join('')}<div class="variants">${rows}</div>`;
+  const canExtractAudio = health.ffmpeg || Boolean(item.music?.url);
+  const audio =
+    item.platform === 'douyin' && variants.length > 0
+      ? `<button type="button" class="variant audio-variant" data-audio="1" data-variant="${escapeHtml(variants[0].id)}" data-disabled="${canExtractAudio ? '0' : '1'}" ${canExtractAudio ? '' : 'aria-disabled="true"'}>
+          <span class="variant-label">提取音频 · M4A</span>
+          <span class="variant-side"><span class="tag">仅音频</span><span class="arrow" aria-hidden="true">↓</span></span>
+        </button>`
+      : '';
+
+  return `${hints.join('')}<div class="variants">${rows}${audio}</div>`;
 }
 
 function renderImages(item, jobId) {
@@ -218,6 +230,15 @@ function renderImages(item, jobId) {
     )
     .join('');
 
+  const audio = item.music?.url
+    ? `<div class="variants">
+        <button type="button" class="variant audio-variant" data-audio="1" data-variant="music" data-disabled="0">
+          <span class="variant-label">提取音频 · 配乐</span>
+          <span class="variant-side"><span class="tag">图文配乐</span><span class="arrow" aria-hidden="true">↓</span></span>
+        </button>
+      </div>`
+    : '';
+
   return `<p class="hint">共 ${images.length} 张图片，可全选或勾选后保存 JPG。</p>
     <div class="thumbs">${thumbs}</div>
     <div class="image-actions">
@@ -225,24 +246,37 @@ function renderImages(item, jobId) {
       <button type="button" class="ghost small" data-image-toggle-all>取消全选</button>
       <button type="button" class="primary small" data-image-save="all">全部保存</button>
       <button type="button" class="primary small" data-image-save="selected">保存选中</button>
-    </div>`;
+    </div>${audio}`;
 }
 
 function bindVariants(jobId, card) {
   for (const button of card.querySelectorAll('.variant')) {
     button.addEventListener('click', () => {
       if (button.dataset.disabled === '1') {
-        setStatus('这个版本需要 ffmpeg 合并音视频，请先安装 ffmpeg，或选择单文件版本。', 'error');
+        setStatus(
+          button.dataset.audio === '1'
+            ? '提取音频需要 ffmpeg。'
+            : '这个版本需要 ffmpeg 合并音视频，请先安装 ffmpeg，或选择单文件版本。',
+          'error',
+        );
         return;
       }
       if (button.dataset.busy === '1') return;
 
       button.dataset.busy = '1';
+      const audio = button.dataset.audio === '1';
       const label = button.querySelector('.variant-label');
       const original = label.textContent;
-      label.textContent = '准备下载…';
-      startDownload(jobId, button.dataset.variant);
-      setStatus('正在准备文件，稍后会出现在浏览器下载列表中。', 'ok');
+      label.textContent = audio ? '准备提取…' : '准备下载…';
+      if (audio) {
+        startFrameDownload(
+          `/api/audio/${encodeURIComponent(jobId)}/${encodeURIComponent(button.dataset.variant)}`,
+        );
+        setStatus('正在提取音频，稍后会出现在下载列表中。', 'ok');
+      } else {
+        startDownload(jobId, button.dataset.variant);
+        setStatus('正在准备文件，稍后会出现在浏览器下载列表中。', 'ok');
+      }
 
       setTimeout(() => {
         label.textContent = original;

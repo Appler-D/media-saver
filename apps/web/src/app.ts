@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -144,6 +145,9 @@ function mimeForExt(ext: string): string {
   const map: Record<string, string> = {
     mp4: 'video/mp4',
     m4a: 'audio/mp4',
+    mp3: 'audio/mpeg',
+    aac: 'audio/aac',
+    wav: 'audio/wav',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
@@ -156,6 +160,29 @@ function mimeForExt(ext: string): string {
 function attachment(filename: string): string {
   const fallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+async function extractAudio(ffmpeg: string, videoPath: string, audioPath: string): Promise<void> {
+  const run = (args: string[]): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const child = spawn(ffmpeg, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      let stderr = '';
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr = `${stderr}${chunk.toString()}`.slice(-2000);
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) resolve(0);
+        else reject(new ResolveError('download_failed', `音频提取失败：${stderr}`));
+      });
+    });
+
+  try {
+    await run(['-y', '-i', videoPath, '-vn', '-c:a', 'copy', '-movflags', '+faststart', audioPath]);
+  } catch {
+    await rm(audioPath, { force: true }).catch(() => {});
+    await run(['-y', '-i', videoPath, '-vn', '-c:a', 'aac', '-b:a', '192k', audioPath]);
+  }
 }
 
 export async function startMediaServer(options: MediaServerOptions = {}): Promise<MediaServer> {
@@ -346,6 +373,99 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
     reply.header('cache-control', 'public, max-age=3600');
     return reply.send(Readable.fromWeb(upstream.body));
   });
+
+  app.get<{ Params: { jobId: string; variantId: string } }>(
+    '/api/audio/:jobId/:variantId',
+    async (request, reply) => {
+      const job = getJob(request.params.jobId);
+      if (job.item.platform !== 'douyin') {
+        throw new ResolveError('not_found', '音频提取目前只支持抖音');
+      }
+      const ffmpeg = await findFfmpeg();
+      const music = job.item.music;
+      const useMusic = Boolean(music?.url) && (job.item.kind === 'images' || !ffmpeg);
+
+      if (useMusic && music?.url) {
+        const ext = music.ext || 'mp3';
+        const upstream = await fetchUpstream(music.url, {
+          headers: music.headers,
+          timeoutMs: 60_000,
+        });
+        if (!upstream.body) {
+          throw new ResolveError('upstream', '配乐下载失败');
+        }
+        const contentType = upstream.headers.get('content-type') ?? mimeForExt(ext);
+        const extFromMime =
+          contentType.includes('audio/mp4') || contentType.includes('video/mp4')
+            ? 'm4a'
+            : contentType.includes('mpeg')
+              ? 'mp3'
+              : ext;
+        const filename = `${sanitizeFilename(job.item.title, 'audio')}-audio.${extFromMime}`;
+        await recordDownload({
+          item: job.item,
+          filename,
+          variant: {
+            id: 'music',
+            label: '音频 · 配乐',
+            kind: 'video',
+            quality: 'audio',
+            watermark: 'none',
+            ext: extFromMime,
+            url: music.url,
+          },
+        }).catch(() => {});
+        reply.header('content-type', contentType);
+        const length = upstream.headers.get('content-length');
+        if (length) reply.header('content-length', length);
+        reply.header('content-disposition', attachment(filename));
+        reply.header('cache-control', 'no-store');
+        return reply.send(Readable.fromWeb(upstream.body));
+      }
+
+      if (job.item.kind === 'images') {
+        throw new ResolveError('not_found', '这条图文没有可提取的配乐');
+      }
+      const variant = job.item.variants.find((item) => item.id === request.params.variantId);
+      if (variant?.kind !== 'video') {
+        throw new ResolveError('not_found', '没有这个视频版本');
+      }
+      if (!ffmpeg) {
+        throw new ResolveError('ffmpeg_missing', '提取音频需要 ffmpeg');
+      }
+
+      await mkdir(TEMP_DIR, { recursive: true });
+      const videoPath = await enqueueDownload(() =>
+        downloadVariant(job.item, variant, { outputDir: TEMP_DIR }),
+      );
+      const audioPath = join(TEMP_DIR, `audio-${randomUUID()}.m4a`);
+      try {
+        await extractAudio(ffmpeg, videoPath, audioPath);
+        const info = await stat(audioPath);
+        const filename = `${sanitizeFilename(job.item.title, 'audio')}-${variant.quality}-audio.m4a`;
+        await recordDownload({
+          item: job.item,
+          filename,
+          variant: { ...variant, id: `${variant.id}-audio`, label: `音频 · ${variant.label}` },
+        }).catch(() => {});
+
+        reply.header('content-type', 'audio/mp4');
+        reply.header('content-length', info.size);
+        reply.header('content-disposition', attachment(filename));
+        reply.header('cache-control', 'no-store');
+        const stream = createReadStream(audioPath);
+        stream.on('close', () => {
+          void rm(audioPath, { force: true });
+          void rm(videoPath, { force: true });
+        });
+        return reply.send(stream);
+      } catch (error) {
+        await rm(audioPath, { force: true }).catch(() => {});
+        await rm(videoPath, { force: true }).catch(() => {});
+        throw error;
+      }
+    },
+  );
 
   app.get<{ Params: { jobId: string; variantId: string } }>(
     '/api/download/:jobId/:variantId',

@@ -482,6 +482,10 @@ button {
   cursor: not-allowed;
 }
 
+.audio-variant {
+  border-style: dashed;
+}
+
 .variant-label {
   font-size: 14px;
   font-weight: 600;

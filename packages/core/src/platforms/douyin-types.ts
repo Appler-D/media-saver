@@ -24,10 +24,17 @@ export interface DouyinImage {
   height?: number;
 }
 
+export interface DouyinMusic {
+  title?: string;
+  duration?: number;
+  play_url?: DouyinUrlList;
+}
+
 export interface DouyinItem {
   aweme_id?: string;
   desc?: string;
   author?: { nickname?: string };
   video?: DouyinVideo;
   images?: DouyinImage[];
+  music?: DouyinMusic;
 }

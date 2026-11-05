@@ -51,6 +51,8 @@ export interface MediaItem {
   kind: 'video' | 'images';
   variants: MediaVariant[];
   images?: MediaImage[];
+  /** 作品配乐，图文作品可直接提取 */
+  music?: MediaStream;
   durationSec?: number;
 }
 

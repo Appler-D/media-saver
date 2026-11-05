@@ -357,6 +357,15 @@ async function resolveDouyin(url: URL, context: ResolveContext): Promise<MediaIt
   const images = buildImages(item);
   const variants = buildVideoVariants(item);
   const kind = images.length > 0 ? 'images' : 'video';
+  const musicUrls = urlsOf(item.music?.play_url).map(toHttps);
+  const music = musicUrls[0]
+    ? {
+        url: musicUrls[0],
+        backupUrls: musicUrls.slice(1),
+        ext: extensionFromUrl(musicUrls[0], 'mp3'),
+        headers: DOUYIN_HEADERS,
+      }
+    : undefined;
 
   if (kind === 'images' && images.length === 0) {
     throw new ResolveError('parse_failed', '这条抖音作品没有可下载的图片');
@@ -379,6 +388,7 @@ async function resolveDouyin(url: URL, context: ResolveContext): Promise<MediaIt
     kind,
     variants: kind === 'video' ? variants : [],
     images: kind === 'images' ? images : undefined,
+    music,
     durationSec: item.video?.duration ? Math.round(item.video.duration / 1000) : undefined,
   };
 }
