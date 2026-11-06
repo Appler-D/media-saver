@@ -24,6 +24,7 @@ import {
   removeHistoryEntry,
   resolveMedia,
   sanitizeFilename,
+  variantFilename,
 } from '@media-saver/core';
 import Fastify, { type FastifyInstance } from 'fastify';
 
@@ -474,6 +475,27 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
       const variant = job.item.variants.find((item) => item.id === request.params.variantId);
       if (!variant) {
         throw new ResolveError('not_found', '没有这个版本');
+      }
+
+      if (variant.url) {
+        const upstream = await fetchUpstream(variant.url, {
+          headers: variant.headers,
+          timeoutMs: 60_000,
+        });
+        if (!upstream.ok || !upstream.body) {
+          throw new ResolveError('download_failed', `视频直链下载失败：HTTP ${upstream.status}`);
+        }
+        const filename = `${variantFilename(job.item, variant)}.${variant.ext}`;
+        const length = upstream.headers.get('content-length');
+        await recordDownload({ item: job.item, filename, variant }).catch(() => {});
+        reply.header(
+          'content-type',
+          upstream.headers.get('content-type') ?? mimeForExt(variant.ext),
+        );
+        if (length) reply.header('content-length', length);
+        reply.header('content-disposition', attachment(filename));
+        reply.header('cache-control', 'no-store');
+        return reply.send(Readable.fromWeb(upstream.body));
       }
 
       await mkdir(TEMP_DIR, { recursive: true });
