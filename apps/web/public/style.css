@@ -482,7 +482,8 @@ button {
   cursor: not-allowed;
 }
 
-.audio-variant {
+.audio-variant,
+.wechat-variant {
   border-style: dashed;
 }
 

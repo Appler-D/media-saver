@@ -163,6 +163,27 @@ function attachment(filename: string): string {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+function ffmpegHeaders(headers: Record<string, string> | undefined): string {
+  return Object.entries(headers ?? {})
+    .map(([key, value]) => `${key}: ${value}${String.fromCharCode(13, 10)}`)
+    .join('');
+}
+
+async function runFfmpeg(ffmpeg: string, args: string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpeg, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = `${stderr}${chunk.toString()}`.slice(-2000);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new ResolveError('download_failed', `ffmpeg 转码失败：${stderr}`));
+    });
+  });
+}
+
 async function extractAudio(ffmpeg: string, videoPath: string, audioPath: string): Promise<void> {
   const run = (args: string[]): Promise<number> =>
     new Promise((resolve, reject) => {
@@ -374,6 +395,94 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
     reply.header('cache-control', 'public, max-age=3600');
     return reply.send(Readable.fromWeb(upstream.body));
   });
+
+  app.get<{ Params: { jobId: string; variantId: string } }>(
+    '/api/wechat/:jobId/:variantId',
+    async (request, reply) => {
+      const job = getJob(request.params.jobId);
+      const variant = job.item.variants.find((item) => item.id === request.params.variantId);
+      if (variant?.kind !== 'video') {
+        throw new ResolveError('not_found', '没有这个视频版本');
+      }
+      const ffmpeg = await findFfmpeg();
+      if (!ffmpeg) {
+        throw new ResolveError('ffmpeg_missing', '导出微信版需要 ffmpeg');
+      }
+
+      await mkdir(TEMP_DIR, { recursive: true });
+      const output = join(TEMP_DIR, `wechat-${randomUUID()}.mp4`);
+      const args: string[] = ['-y'];
+      const addInput = (url: string, headers: Record<string, string> | undefined): void => {
+        const headerText = ffmpegHeaders(headers);
+        if (headerText) args.push('-headers', headerText);
+        args.push('-i', url);
+      };
+
+      if (variant.url) {
+        addInput(variant.url, variant.headers);
+        args.push('-map', '0:v:0', '-map', '0:a:0?');
+      } else if (variant.video) {
+        addInput(variant.video.url, variant.video.headers ?? variant.headers);
+        args.push('-map', '0:v:0');
+        if (variant.audio?.url) {
+          addInput(variant.audio.url, variant.audio.headers ?? variant.headers);
+          args.push('-map', '1:a:0?');
+        }
+      } else {
+        throw new ResolveError('parse_failed', '这个版本没有可转码的视频地址');
+      }
+
+      args.push(
+        '-t',
+        '300',
+        '-vf',
+        "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease",
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        '-movflags',
+        '+faststart',
+        output,
+      );
+
+      try {
+        await runFfmpeg(ffmpeg, args);
+        const info = await stat(output);
+        const filename = `${sanitizeFilename(job.item.title, 'video')}-wechat.mp4`;
+        await recordDownload({
+          item: job.item,
+          filename,
+          variant: {
+            ...variant,
+            id: `${variant.id}-wechat`,
+            label: `微信版 · ${variant.label}（前 5 分钟）`,
+          },
+        }).catch(() => {});
+
+        reply.header('content-type', 'video/mp4');
+        reply.header('content-length', info.size);
+        reply.header('content-disposition', attachment(filename));
+        reply.header('cache-control', 'no-store');
+        const stream = createReadStream(output);
+        stream.on('close', () => {
+          void rm(output, { force: true });
+        });
+        return reply.send(stream);
+      } catch (error) {
+        await rm(output, { force: true }).catch(() => {});
+        throw error;
+      }
+    },
+  );
 
   app.get<{ Params: { jobId: string; variantId: string } }>(
     '/api/audio/:jobId/:variantId',

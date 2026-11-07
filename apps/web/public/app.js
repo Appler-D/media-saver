@@ -203,6 +203,14 @@ function renderVariants(item) {
     .join('');
 
   const canExtractAudio = health.ffmpeg || Boolean(item.music?.url);
+  const wechat =
+    variants.length > 0
+      ? `<button type="button" class="variant wechat-variant" data-wechat="1" data-variant="${escapeHtml(variants[0].id)}" data-disabled="${health.ffmpeg ? '0' : '1'}" ${health.ffmpeg ? '' : 'aria-disabled="true"'}>
+          <span class="variant-label">导出微信版 · ≤5 分钟</span>
+          <span class="variant-side"><span class="tag">H.264 / AAC</span><span class="arrow" aria-hidden="true">↓</span></span>
+        </button>`
+      : '';
+
   const audio =
     item.platform === 'douyin' && variants.length > 0
       ? `<button type="button" class="variant audio-variant" data-audio="1" data-variant="${escapeHtml(variants[0].id)}" data-disabled="${canExtractAudio ? '0' : '1'}" ${canExtractAudio ? '' : 'aria-disabled="true"'}>
@@ -211,7 +219,7 @@ function renderVariants(item) {
         </button>`
       : '';
 
-  return `${hints.join('')}<div class="variants">${rows}${audio}</div>`;
+  return `${hints.join('')}<div class="variants">${rows}${audio}${wechat}</div>`;
 }
 
 function renderImages(item, jobId) {
@@ -252,11 +260,19 @@ function renderImages(item, jobId) {
 function bindVariants(jobId, card) {
   for (const button of card.querySelectorAll('.variant')) {
     button.addEventListener('click', () => {
+      const action =
+        button.dataset.wechat === '1'
+          ? 'wechat'
+          : button.dataset.audio === '1'
+            ? 'audio'
+            : 'download';
       if (button.dataset.disabled === '1') {
         setStatus(
-          button.dataset.audio === '1'
-            ? '提取音频需要 ffmpeg。'
-            : '这个版本需要 ffmpeg 合并音视频，请先安装 ffmpeg，或选择单文件版本。',
+          action === 'wechat'
+            ? '导出微信版需要 ffmpeg。'
+            : action === 'audio'
+              ? '提取音频需要 ffmpeg。'
+              : '这个版本需要 ffmpeg 合并音视频，请先安装 ffmpeg，或选择单文件版本。',
           'error',
         );
         return;
@@ -264,11 +280,16 @@ function bindVariants(jobId, card) {
       if (button.dataset.busy === '1') return;
 
       button.dataset.busy = '1';
-      const audio = button.dataset.audio === '1';
       const label = button.querySelector('.variant-label');
       const original = label.textContent;
-      label.textContent = audio ? '准备提取…' : '准备下载…';
-      if (audio) {
+      label.textContent =
+        action === 'wechat' ? '正在转码…' : action === 'audio' ? '准备提取…' : '准备下载…';
+      if (action === 'wechat') {
+        startFrameDownload(
+          `/api/wechat/${encodeURIComponent(jobId)}/${encodeURIComponent(button.dataset.variant)}`,
+        );
+        setStatus('正在导出微信版（截取前 5 分钟，转 H.264/AAC）…', 'ok');
+      } else if (action === 'audio') {
         startFrameDownload(
           `/api/audio/${encodeURIComponent(jobId)}/${encodeURIComponent(button.dataset.variant)}`,
         );
@@ -278,10 +299,13 @@ function bindVariants(jobId, card) {
         setStatus('正在准备文件，稍后会出现在浏览器下载列表中。', 'ok');
       }
 
-      setTimeout(() => {
-        label.textContent = original;
-        button.dataset.busy = '0';
-      }, 4000);
+      setTimeout(
+        () => {
+          label.textContent = original;
+          button.dataset.busy = '0';
+        },
+        action === 'wechat' ? 60_000 : 4000,
+      );
     });
   }
 }
