@@ -141,6 +141,18 @@ function videoEntries() {
   return resolvedItems.filter(isVideo);
 }
 
+function imageEntries() {
+  return resolvedItems.filter((entry) => (entry.item.images?.length ?? 0) > 0);
+}
+
+function selectedImageIds(entry) {
+  const inputs = entry.card ? [...entry.card.querySelectorAll('[data-image-id]')] : [];
+  if (inputs.length > 0) {
+    return inputs.filter((input) => input.checked).map((input) => input.dataset.imageId);
+  }
+  return (entry.item.images ?? []).map((image) => image.id);
+}
+
 function defaultVariant(item) {
   const variants = item.variants ?? [];
   if (variants.length === 0) return undefined;
@@ -158,11 +170,15 @@ function clearResults() {
 
 function updateBatchBar() {
   const videos = videoEntries();
-  batchBar.hidden = videos.length < 2;
-  batchSummary.textContent = videos.length
-    ? `${videos.length} 个视频 · 优先使用每个视频的最高可用清晰度`
+  const images = imageEntries();
+  batchBar.hidden = videos.length + images.length === 0;
+  const parts = [];
+  if (videos.length) parts.push(`${videos.length} 个视频`);
+  if (images.length) parts.push(`${images.length} 个图集`);
+  batchSummary.textContent = parts.length
+    ? `${parts.join(' · ')}；视频使用最高清晰度，图集保存当前勾选`
     : '';
-  batchDownload.disabled = batchBusy || busy || videos.length === 0;
+  batchDownload.disabled = batchBusy || busy || videos.length + images.length === 0;
 }
 
 function startFrameDownload(path) {
@@ -436,7 +452,7 @@ function addResult(item, jobId, seenBefore = false) {
   coverImage?.addEventListener('error', () => coverImage.remove(), { once: true });
   bindVariants(jobId, card);
   bindImages(jobId, card);
-  resolvedItems.push({ jobId, item });
+  resolvedItems.push({ jobId, item, card });
   resultElement.hidden = false;
   updateBatchBar();
 }
@@ -456,46 +472,60 @@ function addResultError(url, message) {
 
 batchDownload.addEventListener('click', async () => {
   if (batchBusy || busy) return;
-  const videos = videoEntries();
-  if (videos.length < 2) return;
+
+  let skipped = 0;
+  const tasks = [];
+  for (const entry of videoEntries()) {
+    const variant = defaultVariant(entry.item);
+    if (!variant) {
+      skipped += 1;
+      continue;
+    }
+    tasks.push({
+      path: `/api/download/${encodeURIComponent(entry.jobId)}/${encodeURIComponent(variant.id)}`,
+      delay: 1200,
+    });
+  }
+  for (const entry of imageEntries()) {
+    const imageIds = selectedImageIds(entry);
+    if (imageIds.length === 0) {
+      skipped += 1;
+      continue;
+    }
+    for (const imageId of imageIds) {
+      tasks.push({
+        path: `/api/image/${encodeURIComponent(entry.jobId)}/${encodeURIComponent(imageId)}?download=1&format=jpg`,
+        delay: 700,
+      });
+    }
+  }
+
+  if (tasks.length === 0) {
+    setStatus(skipped ? '没有可下载的内容，请检查勾选或清晰度。' : '没有可下载的内容。', 'error');
+    return;
+  }
 
   batchBusy = true;
   batchDownload.disabled = true;
   submitButton.disabled = true;
   batchDownload.textContent = '正在发起…';
 
-  let started = 0;
-  let skipped = 0;
   try {
-    for (const [index, entry] of videos.entries()) {
-      const variant = defaultVariant(entry.item);
-      if (!variant) {
-        skipped += 1;
-        continue;
-      }
-
-      startDownload(entry.jobId, variant.id);
-      started += 1;
-      setStatus(`正在发起下载 ${index + 1}/${videos.length}…`, 'ok');
-      if (index < videos.length - 1) await sleep(1200);
+    for (const [index, task] of tasks.entries()) {
+      startFrameDownload(task.path);
+      setStatus(`正在发起下载 ${index + 1}/${tasks.length}…`, 'ok');
+      if (index < tasks.length - 1) await sleep(task.delay);
     }
 
-    if (started) {
-      const skippedText = skipped ? `，跳过 ${skipped} 个（没有可用版本）` : '';
-      setStatus(
-        `已发起 ${started} 个下载${skippedText}。浏览器如提示多文件下载，请选择允许。`,
-        'ok',
-      );
-    } else {
-      setStatus(
-        skipped ? `没有可批量下载的视频：${skipped} 个缺少可用版本` : '没有可批量下载的视频',
-        'error',
-      );
-    }
+    const skippedText = skipped ? `，跳过 ${skipped} 个没有可下载内容的结果` : '';
+    setStatus(
+      `已发起 ${tasks.length} 个下载${skippedText}。浏览器如提示多文件下载，请选择允许。`,
+      'ok',
+    );
   } finally {
     batchBusy = false;
     submitButton.disabled = false;
-    batchDownload.textContent = '全部下载';
+    batchDownload.textContent = '一键下载';
     updateBatchBar();
   }
 });
