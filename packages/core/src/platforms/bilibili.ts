@@ -177,6 +177,15 @@ async function normalizePageUrl(url: URL, context: ResolveContext): Promise<stri
     host === 'bili2233.cn' ||
     host.endsWith('.bili2233.cn');
   if (!isShortLink) return url.toString();
+  const isB23 = host === 'b23.tv' || host.endsWith('.b23.tv') || host === 'bili2233.cn';
+  if (isB23) {
+    const rawCode = url.pathname.split('/').filter(Boolean)[0] ?? '';
+    const code = rawCode.match(/^[A-Za-z0-9]+/)?.[0];
+    if (code) {
+      const normalizedCode = code.length > 7 ? code.slice(0, 7) : code;
+      if (normalizedCode !== rawCode) url.pathname = `/${normalizedCode}`;
+    }
+  }
 
   return followRedirect(url.toString(), {
     headers: { referer: REFERER },

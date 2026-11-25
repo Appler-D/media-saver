@@ -96,9 +96,14 @@ function cleanShortUrl(value) {
 
     const code = parsed.pathname.match(/^\/[A-Za-z0-9]+/)?.[0];
     if (!code) return value;
+    const isB23 = host === 'b23.tv' || host.endsWith('.b23.tv') || host === 'bili2233.cn';
+    const normalizedCode = isB23 && code.slice(1).length > 7 ? `/${code.slice(1, 8)}` : code;
     const rest = parsed.pathname.slice(code.length);
-    if (rest && (rest.startsWith('.') || /^\/?\d+(?:\.\d+)?\/?$/.test(rest))) {
-      parsed.pathname = `${code}/`;
+    if (
+      normalizedCode !== code ||
+      (rest && (rest.startsWith('.') || /^\/?\d+(?:\.\d+)?\/?$/.test(rest)))
+    ) {
+      parsed.pathname = isB23 ? normalizedCode : `${normalizedCode}/`;
       return parsed.toString();
     }
   } catch {
