@@ -350,9 +350,10 @@ export async function startMediaServer(options: MediaServerOptions = {}): Promis
     return { jobId, item };
   });
 
-  app.get('/api/history', async () => {
+  app.get<{ Querystring: { all?: string } }>('/api/history', async (request) => {
     const history = await readHistory();
-    return { items: history.items.slice(0, 50) };
+    const items = request.query.all === '1' ? history.items : history.items.slice(0, 50);
+    return { items };
   });
 
   app.get('/api/history/export', async (_request, reply) => {

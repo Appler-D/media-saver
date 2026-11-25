@@ -54,9 +54,9 @@ const COOKIE_NAMES = {
   xiaohongshu: '小红书',
 };
 
-const MAX_BATCH = 20;
-const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
-const TRAILING_URL_PUNCTUATION = /[),.;!?，。；！？、]+$/u;
+const MAX_BATCH = 100;
+const URL_PATTERN = /https?:\/\/[^\s"'<>【】「」『』《》〈〉，。；！？、]+/gi;
+const TRAILING_URL_PUNCTUATION = /[),.;!?，。；！？、】」』》〉]+$/u;
 
 let health = { ffmpeg: false, browser: false, cookies: {} };
 let platforms = [];
@@ -64,6 +64,8 @@ let cookieConfigured = { bilibili: false, xiaohongshu: false };
 let busy = false;
 let batchBusy = false;
 let resolvedItems = [];
+let historyKeys = new Set();
+let resolvedKeys = new Set();
 
 function escapeHtml(value) {
   return String(value ?? '').replace(
@@ -78,17 +80,52 @@ function setStatus(message, tone = '') {
   statusElement.dataset.tone = tone;
 }
 
-function extractUrls(value) {
+function cleanShortUrl(value) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const shortHost =
+      host === 'b23.tv' ||
+      host.endsWith('.b23.tv') ||
+      host === 'bili2233.cn' ||
+      host === 'v.douyin.com' ||
+      host === 'xhslink.com' ||
+      host.endsWith('.xhslink.com') ||
+      host === 'xhslink.cn';
+    if (!shortHost) return value;
+
+    const code = parsed.pathname.match(/^\/[A-Za-z0-9]+/)?.[0];
+    if (!code) return value;
+    const rest = parsed.pathname.slice(code.length);
+    if (rest && (rest.startsWith('.') || /^\/?\d+(?:\.\d+)?\/?$/.test(rest))) {
+      parsed.pathname = `${code}/`;
+      return parsed.toString();
+    }
+  } catch {
+    // 非法 URL 交给服务端继续校验
+  }
+  return value;
+}
+
+function analyzeUrls(value) {
   const urls = [];
   const seen = new Set();
+  let duplicateCount = 0;
+  let cleanedCount = 0;
   for (const match of value.match(URL_PATTERN) ?? []) {
-    const url = match.replace(TRAILING_URL_PUNCTUATION, '');
+    const base = match.replace(TRAILING_URL_PUNCTUATION, '');
+    if (!base) continue;
+    const url = cleanShortUrl(base);
+    if (url !== base) cleanedCount += 1;
     const key = url.replace(/\/+$/, '');
-    if (!url || seen.has(key)) continue;
+    if (seen.has(key)) {
+      duplicateCount += 1;
+      continue;
+    }
     seen.add(key);
     urls.push(url);
   }
-  return urls;
+  return { urls, duplicateCount, cleanedCount };
 }
 
 function isVideo(entry) {
@@ -108,6 +145,7 @@ function defaultVariant(item) {
 
 function clearResults() {
   resolvedItems = [];
+  resolvedKeys = new Set();
   resultList.innerHTML = '';
   resultElement.hidden = true;
   updateBatchBar();
@@ -310,7 +348,7 @@ function bindVariants(jobId, card) {
   }
 }
 
-function cardHtml(item, jobId) {
+function cardHtml(item, jobId, seenBefore = false) {
   const cover = item.coverUrl
     ? `<img class="cover" src="/api/cover/${encodeURIComponent(jobId)}" alt="" loading="lazy" />`
     : '<div class="cover cover-empty"></div>';
@@ -326,6 +364,7 @@ function cardHtml(item, jobId) {
           <div class="badges">
             <span class="badge badge-${escapeHtml(item.platform)}">${escapeHtml(PLATFORM_NAMES[item.platform] ?? item.platformName)}</span>
             <span class="badge ghost">${item.kind === 'images' ? `${item.images?.length ?? 0} 张图片` : '视频'}</span>
+            ${seenBefore ? '<span class="badge ghost">历史已下载</span>' : ''}
           </div>
           <h2>${escapeHtml(item.title)}</h2>
           <p class="meta">${escapeHtml(meta)}</p>
@@ -383,8 +422,8 @@ function bindImages(jobId, card) {
   }
 }
 
-function addResult(item, jobId) {
-  resultList.insertAdjacentHTML('beforeend', cardHtml(item, jobId));
+function addResult(item, jobId, seenBefore = false) {
+  resultList.insertAdjacentHTML('beforeend', cardHtml(item, jobId, seenBefore));
   const card = resultList.lastElementChild;
   if (!card) return;
 
@@ -645,6 +684,17 @@ function renderHistory(items) {
     .join('');
 }
 
+async function loadHistoryKeys() {
+  try {
+    const data = await api('/api/history?all=1');
+    historyKeys = new Set(
+      (data.items ?? []).map((entry) => `${entry.platform}:${entry.platformItemId}`),
+    );
+  } catch {
+    historyKeys = new Set();
+  }
+}
+
 async function loadHistory() {
   historyList.innerHTML = '<p class="history-empty">正在读取历史…</p>';
   try {
@@ -812,16 +862,17 @@ form.addEventListener('submit', (event) => {
   const raw = input.value.trim();
   if (!raw || busy || batchBusy) return;
 
-  const urls = extractUrls(raw);
+  const analysis = analyzeUrls(raw);
+  const urls = analysis.urls;
   if (urls.length === 0) urls.push(raw);
   if (urls.length > MAX_BATCH) {
     setStatus(`一次最多解析 ${MAX_BATCH} 个链接，请分批粘贴。`, 'error');
     return;
   }
-  void resolveUrls(urls);
+  void resolveUrls(urls, analysis);
 });
 
-async function resolveUrls(urls) {
+async function resolveUrls(urls, extraction = {}) {
   if (busy || batchBusy || urls.length === 0) return;
   if (urls.length > MAX_BATCH) {
     setStatus(`一次最多解析 ${MAX_BATCH} 个链接，请分批粘贴。`, 'error');
@@ -839,8 +890,11 @@ async function resolveUrls(urls) {
     if (busy) setStatus('部分平台需要启动本机浏览器，首次解析可能多等几秒…');
   }, 4500);
 
+  await loadHistoryKeys();
   let succeeded = 0;
   let failed = 0;
+  let skippedDuplicates = 0;
+  let seenCount = 0;
   try {
     for (const [index, url] of urls.entries()) {
       if (urls.length > 1) setStatus(`正在解析 ${index + 1}/${urls.length}…`);
@@ -850,7 +904,15 @@ async function resolveUrls(urls) {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url }),
         });
-        addResult(data.item, data.jobId);
+        const itemKey = `${data.item.platform}:${data.item.platformItemId}`;
+        if (resolvedKeys.has(itemKey)) {
+          skippedDuplicates += 1;
+          continue;
+        }
+        resolvedKeys.add(itemKey);
+        const seenBefore = historyKeys.has(itemKey);
+        if (seenBefore) seenCount += 1;
+        addResult(data.item, data.jobId, seenBefore);
         succeeded += 1;
       } catch (error) {
         addResultError(url, error instanceof Error ? error.message : String(error));
@@ -859,11 +921,21 @@ async function resolveUrls(urls) {
     }
 
     if (urls.length === 1) {
-      if (succeeded === 0) setStatus('解析失败', 'error');
-      else setStatus('');
+      if (succeeded === 0) {
+        setStatus('解析失败', 'error');
+      } else {
+        const notes = [];
+        if (seenCount > 0) notes.push('这条以前下载过，可再次下载');
+        if (extraction.cleanedCount > 0) notes.push(`已清理 ${extraction.cleanedCount} 个数字尾巴`);
+        setStatus(notes.join('，'), notes.length > 0 ? 'ok' : '');
+      }
     } else {
       const parts = [`已解析 ${succeeded} 个链接`];
       if (failed > 0) parts.push(`${failed} 个失败`);
+      if (skippedDuplicates > 0) parts.push(`跳过 ${skippedDuplicates} 个重复作品`);
+      if (extraction.duplicateCount > 0) parts.push(`跳过 ${extraction.duplicateCount} 个重复链接`);
+      if (seenCount > 0) parts.push(`${seenCount} 个历史已下载`);
+      if (extraction.cleanedCount > 0) parts.push(`清理 ${extraction.cleanedCount} 个数字尾巴`);
       const videos = videoEntries().length;
       if (videos > 1) parts.push(`可批量下载 ${videos} 个视频`);
       setStatus(parts.join('，'), failed > 0 ? 'error' : 'ok');
@@ -930,14 +1002,21 @@ async function loadLinkFile(file) {
   setStatus(`正在读取 ${file.name}…`);
   try {
     const text = await file.text();
-    const urls = extractUrls(text);
+    const analysis = analyzeUrls(text);
+    const urls = analysis.urls;
     if (urls.length === 0) {
       setStatus('文件里没有找到链接。', 'error');
       return;
     }
+    const details = [];
+    if (analysis.duplicateCount > 0) details.push(`跳过 ${analysis.duplicateCount} 个重复链接`);
+    if (analysis.cleanedCount > 0) details.push(`清理 ${analysis.cleanedCount} 个数字尾巴`);
     clearResults();
     renderImportLinks(urls, file.name);
-    setStatus(`已识别 ${urls.length} 个链接，勾选后点“解析选中”。`, 'ok');
+    setStatus(
+      `已识别 ${urls.length} 个链接${details.length > 0 ? `，${details.join('，')}` : ''}，勾选后点“解析选中”。`,
+      'ok',
+    );
   } catch (error) {
     setStatus(`读取文件失败：${error instanceof Error ? error.message : String(error)}`, 'error');
   }
